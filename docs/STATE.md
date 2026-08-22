@@ -4,8 +4,8 @@ Updated 2026-08-22.
 
 | Phase | Status | Notes |
 |---|---|---|
-| 0 recon + scaffold | done | Tooling verified. Repo scaffolded; debug APK builds locally. CI + secrets hook in place. Not yet pushed to GitHub. |
-| 1 bus online | not started | Needs RAID server SSH alias (owner). Tailscale CLI absent on laptop. |
+| 0 recon + scaffold | done | Tooling verified. Scaffolded; APK builds as com.emotiveautomaton.wristwork. Pushed public: github.com/EmotiveAutomaton/wristwork. |
+| 1 bus online | blocked on owner | Server identified: Synology NAS on the LAN (details in the local server doc, not in this repo). SSH needs a one-time key install by the owner. Laptop has no Tailscale. |
 | 2 watch link | not started | Owner steps: Wi-Fi, developer options, wireless debugging pair code. |
 | 3 health complication | code written, never installed | `HealthComplicationService` compiled in Phase 0; unverified on hardware. |
 | 4 state complication | not started | |

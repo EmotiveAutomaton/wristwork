@@ -37,8 +37,12 @@ if [[ -f config.properties ]]; then
   while IFS='=' read -r k v; do
     v="${v%%#*}"; v="$(echo "$v" | xargs || true)"
     case "$k" in
-      TOPIC_*|NTFY_BASE_URL|PRINTER_HOST|PRINTER_API_KEY|RAID_SSH_HOST|RIG_SSH_HOST)
+      NTFY_BASE_URL|PRINTER_HOST|PRINTER_API_KEY|RAID_SSH_HOST|RIG_SSH_HOST)
         [[ -n "$v" && ${#v} -ge 4 ]] && patterns+=("$(printf '%s' "$v" | sed 's/[.[\*^$\/]/\&/g')");;
+      # Topic names count as secrets only once they are secret-shaped (ntfy.sh mode, >=24 random
+      # chars). Short tailnet-mode words like "tags" would false-positive across the whole repo.
+      TOPIC_*)
+        [[ -n "$v" && ${#v} -ge 12 ]] && patterns+=("$(printf '%s' "$v" | sed 's/[.[\*^$\/]/\&/g')");;
     esac
   done < config.properties
 fi
