@@ -34,5 +34,30 @@
                 android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
                 android:value="900" />
         </service>
+
+        <!-- Phase 4: Component A. Face shows state + elapsed; tap opens the grid. -->
+        <service
+            android:name=".complication.StateComplicationService"
+            android:exported="true"
+            android:icon="@drawable/ic_state"
+            android:label="@string/complication_state"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT" />
+            <!-- Elapsed ticks via TimeDifferenceComplicationText; refreshes are pushed on tag. -->
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="0" />
+        </service>
+
+        <!-- The 2x4 grid. No launcher intent-filter by design (D7): reachable only from the face. -->
+        <activity
+            android:name=".ui.TagActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault" />
     </application>
 </manifest>

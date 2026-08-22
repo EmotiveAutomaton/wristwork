@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">wristwork</string>
     <string name="complication_health">wristwork · health</string>
+    <string name="complication_state">wristwork · state</string>
 </resources>
