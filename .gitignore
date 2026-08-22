@@ -1,0 +1,26 @@
+# secrets / local config — never commit
+config.properties
+local.properties
+*.keystore
+*.jks
+*.pem
+*.key
+.env
+.env.*
+
+# build
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+*.ap_
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDE
+.idea/
+*.iml
+.kotlin/
+.DS_Store
