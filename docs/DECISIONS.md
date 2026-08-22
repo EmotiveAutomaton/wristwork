@@ -4,7 +4,7 @@ Each entry: what was decided, why, what would change it. Made by the build agent
 
 ## D1 — minSdk 36 (2026-08-22, proposed)
 Pixel Watch 5 ships Wear OS 6 = Android 16 = API 36. Spec: "min SDK = this device only, no backcompat."
-Reverts to 35 if the watch reports `ro.build.version.sdk` = 35 in Phase 2.
+Phase 2 outcome: the watch reports SDK 37, so minSdk 36 stands (and could rise to 37 if ever useful).
 
 ## D2 — config compiled into BuildConfig at build time (2026-08-22, proposed)
 Server URL and topic names are read from gitignored `config.properties` and baked into the APK.
