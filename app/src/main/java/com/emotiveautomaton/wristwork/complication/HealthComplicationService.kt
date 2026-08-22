@@ -1,4 +1,4 @@
-package com.emotiveautomaton.telltale.complication
+package com.emotiveautomaton.wristwork.complication
 
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
@@ -6,7 +6,7 @@ import androidx.wear.watchface.complications.data.PlainComplicationText
 import androidx.wear.watchface.complications.data.ShortTextComplicationData
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
-import com.emotiveautomaton.telltale.net.NtfyClient
+import com.emotiveautomaton.wristwork.net.NtfyClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

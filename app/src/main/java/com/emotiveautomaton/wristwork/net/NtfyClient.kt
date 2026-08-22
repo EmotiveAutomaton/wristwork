@@ -1,6 +1,6 @@
-package com.emotiveautomaton.telltale.net
+package com.emotiveautomaton.wristwork.net
 
-import com.emotiveautomaton.telltale.BuildConfig
+import com.emotiveautomaton.wristwork.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit

@@ -28,9 +28,10 @@ Android needs a distinct `<service>` class per data source, so the generic provi
 base and `AgentsComplicationService` / `RigComplicationService` / `PrinterComplicationService` are
 three-line subclasses supplying topic + formatter.
 
-## D6 — package `com.emotiveautomaton.telltale`, repo folder `wristwork`
-The spec names the project telltale; the folder was pre-named. Repo on GitHub will be `telltale`
-unless the owner says otherwise.
+## D6 — project name is `wristwork` (owner decision, 2026-08-22)
+The spec's runbook called it "telltale"; the owner chose the folder name **wristwork** as the durable
+name ("something I can always come back to"). Package `com.emotiveautomaton.wristwork`, public GitHub
+repo `wristwork` under EmotiveAutomaton. "telltale" survives only inside `wristworkSpecs.md`.
 
 ## D7 — no launcher activity (2026-08-22, proposed)
 The app exposes complications only. The tag grid (Phase 4) is an activity launched from the

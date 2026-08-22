@@ -10,7 +10,7 @@ the "verify it yourself" reflex. What did not is listed at the bottom, with why.
 
 ## What this repository is
 
-**telltale**: Wear OS complications on a Pixel Watch 5 riding an ntfy message bus, plus the server
+**wristwork**: Wear OS complications on a Pixel Watch 5 riding an ntfy message bus, plus the server
 plumbing behind them (RAID server: ntfy + label archive + printer poller; rig: stats timer). Public
 repo. Secrets never enter git. **Raw label data (`labels.jsonl`) is immutable; every derived artifact
 is versioned and recomputable. This is a law.**

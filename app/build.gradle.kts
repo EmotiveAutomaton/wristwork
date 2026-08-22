@@ -18,11 +18,11 @@ val config = Properties().apply {
 fun cfg(key: String): String = config.getProperty(key)?.substringBefore('#')?.trim().orEmpty()
 
 android {
-    namespace = "com.emotiveautomaton.telltale"
+    namespace = "com.emotiveautomaton.wristwork"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.emotiveautomaton.telltale"
+        applicationId = "com.emotiveautomaton.wristwork"
         // Pixel Watch 5 on Wear OS 6 (Android 16, API 36). This device only; no backcompat by spec.
         minSdk = 36
         targetSdk = 36
