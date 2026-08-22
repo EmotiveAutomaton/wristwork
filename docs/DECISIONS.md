@@ -36,3 +36,31 @@ repo `wristwork` under EmotiveAutomaton. "telltale" survives only inside `wristw
 ## D7 — no launcher activity (2026-08-22, proposed)
 The app exposes complications only. The tag grid (Phase 4) is an activity launched from the
 complication tap action, not from the app drawer. Keeps the non-goal "any UI beyond one grid and four slots."
+
+## D8 — LAN-first, no Tailscale anywhere yet (2026-08-22)
+Verified: no Tailscale on the laptop, no Tailscale package on the NAS. The watch lives on home
+Wi-Fi, so v1 talks straight to the NAS over the LAN; away-from-home tags queue offline and replay
+(already a spec requirement). The spec's tailnet assumption is an upgrade path, not a prerequisite;
+the ntfy.sh fallback (Phase 3) remains the escape hatch if LAN reachability disappoints.
+
+## D9 — label subscriber is a restart-always container, not a systemd unit (2026-08-22)
+Deviation from the spec's wording ("install a systemd unit"). On Synology DSM, hand-installed
+systemd units do not reliably survive DSM updates; the Docker daemon's restart policy does, and it
+is the box's native idiom (everything else on it runs that way). Same guarantee, sturdier host fit.
+The nightly mirror is deferred until the rig's address exists; interim risk is bounded because the
+label file sits on redundant RAID storage.
+
+## D10 — ntfy published on host port 8093 (2026-08-22)
+80/443/5000/5001/8080/9000 are taken by DSM and existing tenants; 8093 was free and is now the
+port baked into the app config. Changing it is a config edit + reprovision, not code.
+
+## D11 — cleartext HTTP allowed app-wide (2026-08-22)
+`usesCleartextTraffic="true"`: the server is plain http on a private LAN in v1. Scoping it to a
+network-security-config domain list would hardcode the IP into a committed XML resource — worse for
+the no-hostnames-in-git law than allowing cleartext globally in a single-purpose personal app.
+Revisit if the server ever gets TLS via DSM reverse proxy.
+
+## D12 — passwordless docker via a scoped sudoers line (proposed, awaiting owner)
+Future sessions need `docker` on the NAS without a password prompt. Proposal: a one-line
+`/etc/sudoers.d/` entry limited to the docker binary for the owner's user. Until it exists, any
+docker-touching step needs the owner to run one command themselves.

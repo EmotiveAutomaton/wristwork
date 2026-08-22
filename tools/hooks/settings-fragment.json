@@ -1,0 +1,13 @@
+{
+  "//": "wristwork Phase 1 — Claude Code notification hooks. Merge into ~/.claude/settings.json.",
+  "//how": "Stop = Claude finished a turn -> 'done: {project}'. Notification = Claude needs input.",
+  "//secrets": "The ntfy URL lives in ~/.claude/hooks/ntfy_notify.py (user-local, generated), never in this repo.",
+  "hooks": {
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "python \"C:/Users/abrah/.claude/hooks/ntfy_notify.py\" done", "timeout": 10 } ] }
+    ],
+    "Notification": [
+      { "hooks": [ { "type": "command", "command": "python \"C:/Users/abrah/.claude/hooks/ntfy_notify.py\" input", "timeout": 10 } ] }
+    ]
+  }
+}
