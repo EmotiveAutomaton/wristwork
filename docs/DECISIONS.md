@@ -64,3 +64,11 @@ Revisit if the server ever gets TLS via DSM reverse proxy.
 Future sessions need `docker` on the NAS without a password prompt. Proposal: a one-line
 `/etc/sudoers.d/` entry limited to the docker binary for the owner's user. Until it exists, any
 docker-touching step needs the owner to run one command themselves.
+
+## D13 — the "rig" is this workstation (2026-08-22)
+The spec assumed a separate always-on compute box. None exists; the machine matching the rig's
+description (GPU, local models, runs the research projects) is the owner's Windows workstation.
+Consequences: the nightly `labels.jsonl` mirror pulls TO this machine (`tools/rig/mirror_labels.ps1`,
+Task Scheduler entry "wristwork-labels-mirror", 03:30); it misses nights the machine is off, which
+is acceptable because the archive is append-only and every pull is a full catch-up. The Phase 5
+stats feeder will publish from this machine on the same reasoning.

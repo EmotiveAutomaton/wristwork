@@ -24,3 +24,6 @@ captures/
 *.iml
 .kotlin/
 .DS_Store
+
+# raw label mirrors and local data — never committed (privacy law)
+data/
