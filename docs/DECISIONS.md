@@ -72,3 +72,15 @@ Consequences: the nightly `labels.jsonl` mirror pulls TO this machine (`tools/ri
 Task Scheduler entry "wristwork-labels-mirror", 03:30); it misses nights the machine is off, which
 is acceptable because the archive is append-only and every pull is a full catch-up. The Phase 5
 stats feeder will publish from this machine on the same reasoning.
+
+## D14 — staleness renders as lowercase-in-parens (2026-08-22)
+SHORT_TEXT complications cannot literally dim. Age is always visible (auto-ticking time
+difference as the text line); past 2 h the payload title additionally drops to lowercase in
+parens — "(done)" — so stale can never be misread as fresh. The printer formatter returns
+NO_DATA on `idle`, which removes the complication entirely between prints (spec).
+
+## D15 — channel poll rides the platform refresh; cache survives network loss (2026-08-22)
+Each channel service polls `{server}/{topic}/json?poll=1&since={last}` inside the platform's
+scheduled complication update (UPDATE_PERIOD_SECONDS=900; the ~15-min floor is accepted). On
+network failure the cached payload renders with its true age still ticking — no retry machinery,
+no alarms. Last payload + timestamp per topic live in DataStore.

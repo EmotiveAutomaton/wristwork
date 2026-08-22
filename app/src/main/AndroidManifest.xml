@@ -59,5 +59,59 @@
             android:name=".ui.TagActivity"
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault" />
+
+        <!-- Phase 5: Component B — three instantiations of the generic channel provider. -->
+        <service
+            android:name=".complication.AgentsComplicationService"
+            android:exported="true"
+            android:icon="@drawable/ic_agents"
+            android:label="@string/complication_agents"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="900" />
+        </service>
+
+        <!-- Phase 5: Component B — three instantiations of the generic channel provider. -->
+        <service
+            android:name=".complication.RigComplicationService"
+            android:exported="true"
+            android:icon="@drawable/ic_rig"
+            android:label="@string/complication_rig"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="900" />
+        </service>
+
+        <!-- Phase 5: Component B — three instantiations of the generic channel provider. -->
+        <service
+            android:name=".complication.PrinterComplicationService"
+            android:exported="true"
+            android:icon="@drawable/ic_printer"
+            android:label="@string/complication_printer"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="900" />
+        </service>
     </application>
 </manifest>

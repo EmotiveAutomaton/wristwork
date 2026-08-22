@@ -2,4 +2,7 @@
     <string name="app_name">wristwork</string>
     <string name="complication_health">wristwork · health</string>
     <string name="complication_state">wristwork · state</string>
+    <string name="complication_agents">wristwork · agents</string>
+    <string name="complication_rig">wristwork · rig</string>
+    <string name="complication_printer">wristwork · printer</string>
 </resources>
