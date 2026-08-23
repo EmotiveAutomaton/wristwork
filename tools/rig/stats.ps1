@@ -1,7 +1,8 @@
-# Rig stats feeder v3: totals + top-5 processes with per-process cpu/gpu/ram percent.
-# Posts to topic `rig` every 5 minutes flat (graph continuity; bus caches 24 h, frame reads 6 h).
-# All values integer percent of the machine max, capped at 99.
-# Payload: {"cpu":32,"ram":42,"gpu":91,"procs":[["llama-server",4,91,12],...]}  ([name,c,g,r])
+# Rig stats feeder v4 -> topic `rig`, every 5 minutes flat. Integer percent, capped 99.
+# Adds: vram %, GPU/CPU temperature (deg C), top TEN processes, and a temperature alert:
+# crossing unsafe (gpu >= 90 C or cpu >= 95 C) posts a high-priority message to the agents topic
+# once per excursion (re-armed when it cools); the watch icon logic reads temps off the payload.
+# Payload: {"cpu":n,"ram":n,"gpu":n,"vram":n,"tg":n,"tc":n,"procs":[["name",c,g,r] x10]}
 $ErrorActionPreference = "Stop"
 $root = Split-Path (Split-Path $PSScriptRoot)
 $cfg = @{}
@@ -9,6 +10,7 @@ Get-Content (Join-Path $root "config.properties") | ForEach-Object {
     if ($_ -match '^\s*([A-Z_]+)\s*=\s*([^#]*)') { $cfg[$Matches[1]] = $Matches[2].Trim() }
 }
 $url = "$($cfg['NTFY_BASE_URL'])/$($cfg['TOPIC_RIG'])"
+$alertUrl = "$($cfg['NTFY_BASE_URL'])/$($cfg['TOPIC_AGENTS'])"
 $cap = { param($v) [math]::Min(99, [math]::Max(0, [math]::Round($v))) }
 
 # --- totals ---
@@ -16,17 +18,27 @@ $cpu = & $cap ((Get-CimInstance Win32_Processor | Measure-Object -Property LoadP
 $os = Get-CimInstance Win32_OperatingSystem
 $totalRamBytes = $os.TotalVisibleMemorySize * 1KB
 $ram = & $cap (100 * (1 - $os.FreePhysicalMemory / $os.TotalVisibleMemorySize))
-$gpu = $null
+$gpu = $null; $vram = $null; $tg = $null
 try {
-    $g = & nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>$null
-    if ($g) { $gpu = & $cap ([int]($g | Select-Object -First 1)) }
+    $g = & nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits 2>$null
+    if ($g) {
+        $parts = ($g | Select-Object -First 1) -split '\s*,\s*'
+        $gpu = & $cap ([double]$parts[0])
+        if ([double]$parts[2] -gt 0) { $vram = & $cap (100 * [double]$parts[1] / [double]$parts[2]) }
+        $tg = [math]::Round([double]$parts[3])
+    }
+} catch {}
+$tc = $null
+try {
+    $tz = Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop |
+        Select-Object -First 1
+    if ($tz) { $tc = [math]::Round($tz.CurrentTemperature / 10 - 273.15) }
 } catch {}
 
-# --- per-process GPU by pid: Windows GPU Engine counters (WDDM hides nvidia pmon's view;
-# these are the numbers Task Manager shows). Sum across a pid's engines, cap 99.
+# --- per-process GPU by pid: Windows GPU Engine counters (Task Manager's numbers; nvidia's own
+# per-process view is blocked under WDDM). Bursty: two samples 1 s apart, keep each pid's max.
 $gpuByPid = @{}
 try {
-    # GPU load is bursty (inference requests): sample twice 1 s apart, keep each pid's max.
     $gs = (Get-Counter '\GPU Engine(*)\Utilization Percentage' -SampleInterval 1 -MaxSamples 2 `
         -ErrorAction SilentlyContinue).CounterSamples
     foreach ($x in $gs) {
@@ -38,11 +50,10 @@ try {
     }
 } catch {}
 
-# --- top processes by CPU, with pid mapping for gpu/ram lookups ---
+# --- top 10 processes, ranked by each one's busiest resource ---
 $procs = @()
 try {
     $cores = [Environment]::ProcessorCount
-    # Two samples 1 s apart: the first '% Processor Time' sample of a session reads ~0.
     $counter = Get-Counter '\Process(*)\% Processor Time', '\Process(*)\ID Process' `
         -SampleInterval 1 -MaxSamples 2 -ErrorAction SilentlyContinue | Select-Object -Last 1
     $cpuS = @{}; $pidS = @{}
@@ -51,8 +62,6 @@ try {
         if ($smp.Path -like '*% processor time*') { $cpuS[$smp.InstanceName] = $smp.CookedValue }
         else { $pidS[$smp.InstanceName] = [int]$smp.CookedValue }
     }
-    # Rank by the process's busiest resource (max of c/g/r), not CPU alone — a GPU-bound
-    # model server with idle CPU must still surface.
     $ramByPid = @{}
     foreach ($gp in Get-Process -ErrorAction SilentlyContinue) { $ramByPid[$gp.Id] = $gp.WorkingSet64 }
     $scored = foreach ($e in $cpuS.GetEnumerator()) {
@@ -62,7 +71,7 @@ try {
         $r0 = if ($null -ne $procId -and $ramByPid.ContainsKey($procId)) { & $cap (100 * $ramByPid[$procId] / $totalRamBytes) } else { 0 }
         [pscustomobject]@{ Key = $e.Key; C = $c0; G = $g0; R = $r0; Score = [math]::Max($c0, [math]::Max($g0, $r0)) }
     }
-    $top = $scored | Sort-Object Score -Descending | Select-Object -First 5
+    $top = $scored | Sort-Object Score -Descending | Select-Object -First 10
     $procs = @($top | ForEach-Object {
         $name = ($_.Key -replace '#\d+$', '')
         , @($name.Substring(0, [math]::Min(12, $name.Length)), $_.C, $_.G, $_.R)
@@ -71,6 +80,22 @@ try {
 
 $payload = [ordered]@{ cpu = $cpu; ram = $ram }
 if ($null -ne $gpu) { $payload.gpu = $gpu }
+if ($null -ne $vram) { $payload.vram = $vram }
+if ($null -ne $tg) { $payload.tg = $tg }
+if ($null -ne $tc) { $payload.tc = $tc }
 if ($procs.Count -gt 0) { $payload.procs = $procs }
 $json = ($payload | ConvertTo-Json -Compress -Depth 4)
 Invoke-RestMethod -Method Post -Uri $url -Body $json -TimeoutSec 10 | Out-Null
+
+# --- temperature alert: once per excursion, re-armed after cooldown ---
+$GPU_UNSAFE = 90; $CPU_UNSAFE = 95
+$hot = ($null -ne $tg -and $tg -ge $GPU_UNSAFE) -or ($null -ne $tc -and $tc -ge $CPU_UNSAFE)
+$flag = Join-Path (Join-Path $root "data") "rig-hot.flag"
+if ($hot -and -not (Test-Path $flag)) {
+    $msg = "RIG HOT:" + $(if ($null -ne $tg) { " gpu ${tg}C" }) + $(if ($null -ne $tc) { " cpu ${tc}C" })
+    Invoke-RestMethod -Method Post -Uri $alertUrl -Body $msg `
+        -Headers @{ Title = "rig temperature"; Priority = "high" } -TimeoutSec 10 | Out-Null
+    New-Item -ItemType File -Force $flag | Out-Null
+} elseif (-not $hot -and (Test-Path $flag)) {
+    Remove-Item $flag -Force
+}

@@ -100,6 +100,16 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
     /** Optional second line for SHORT_TEXT slots (faces place/truncate it as they see fit). */
     open fun titleText(message: String): String? = null
 
+    /** Optional monochrome icon (face-tinted); may vary with the payload (thresholds). */
+    open fun iconRes(message: String): Int? = null
+
+    private fun monoImage(message: String): androidx.wear.watchface.complications.data.MonochromaticImage? =
+        iconRes(message)?.let {
+            androidx.wear.watchface.complications.data.MonochromaticImage.Builder(
+                android.graphics.drawable.Icon.createWithResource(this, it)
+            ).build()
+        }
+
     /** Longer rendering for LONG_TEXT-capable slots; defaults to the short form. */
     open fun longFormat(message: String): String? = format(message)
 
@@ -125,23 +135,28 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
                     contentDescription = desc,
                 ).setTapAction(tapIntent())
                 titleText(payload)?.let { b.setTitle(PlainComplicationText.Builder(it).build()) }
+                monoImage(payload)?.let { b.setMonochromaticImage(it) }
                 b.build()
             }
             ComplicationType.LONG_TEXT -> {
                 val long = longFormat(payload) ?: return NoDataComplicationData()
                 val shownLong = if (age > Duration.ofHours(2)) "(${long.lowercase()})" else long
-                LongTextComplicationData.Builder(
+                val lb = LongTextComplicationData.Builder(
                     text = PlainComplicationText.Builder(shownLong).build(),
                     contentDescription = desc,
-                ).setTapAction(tapIntent()).build()
+                ).setTapAction(tapIntent())
+                monoImage(payload)?.let { lb.setMonochromaticImage(it) }
+                lb.build()
             }
             ComplicationType.RANGED_VALUE -> {
                 val v = gaugeValue(payload) ?: return null
-                RangedValueComplicationData.Builder(
+                val rb = RangedValueComplicationData.Builder(
                     value = v.coerceIn(0f, 99f), min = 0f, max = 99f,
                     contentDescription = desc,
                 ).setText(PlainComplicationText.Builder(shown).build())
-                    .setTapAction(tapIntent()).build()
+                    .setTapAction(tapIntent())
+                monoImage(payload)?.let { rb.setMonochromaticImage(it) }
+                rb.build()
             }
             else -> null
         }
@@ -151,13 +166,19 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
 /** `agents` — Claude Code and friends. "done: wristwork" -> "done", "needs input: x" -> "INPUT". */
 class AgentsComplicationService : ChannelComplicationService() {
     override val topic get() = com.emotiveautomaton.wristwork.BuildConfig.TOPIC_AGENTS
+    private fun project(message: String): String? =
+        Regex("^done:\\s*(.+)$", RegexOption.IGNORE_CASE)
+            .find(message.trim())?.groupValues?.get(1)?.trim()
     override fun format(message: String): String {
         val m = message.trim()
         return when {
             m.startsWith("needs input", ignoreCase = true) -> "INPUT"
-            m.startsWith("done", ignoreCase = true) -> "done"
-            else -> m.take(7)
+            else -> (project(m) ?: m).take(7)
         }
+    }
+    override fun longFormat(message: String): String? {
+        val m = message.trim()
+        return if (m.startsWith("needs input", ignoreCase = true)) "INPUT" else (project(m) ?: m).take(40)
     }
 }
 
@@ -169,17 +190,35 @@ class RigComplicationService : ChannelComplicationService() {
         Json.parseToJsonElement(message).jsonObject[key]?.jsonPrimitive?.content?.toDoubleOrNull()
             ?.toInt()?.coerceIn(0, 99)
     }.getOrNull()
-    override fun format(message: String): String =
+    /** Quintile block glyph; the top quintile escalates to an exclamation point. */
+    private fun glyph(v: Int): String = when {
+        v >= 80 -> "!"
+        v >= 60 -> "\u2587"   // upper three-quarter block
+        v >= 40 -> "\u2585"
+        v >= 20 -> "\u2583"
+        else -> "\u2581"
+    }
+    private fun triple(message: String, sep: String): String? =
         listOfNotNull(
-            pct(message, "cpu")?.let { "c$it" },
-            pct(message, "gpu")?.let { "g$it" },
-        ).joinToString("").ifEmpty { message.take(6) }
-    override fun longFormat(message: String): String? =
-        listOfNotNull(
-            pct(message, "cpu")?.let { "c$it" },
-            pct(message, "gpu")?.let { "g$it" },
-            pct(message, "ram")?.let { "r$it" },
-        ).joinToString("-").ifEmpty { null }
+            pct(message, "cpu")?.let { "c${glyph(it)}" },
+            pct(message, "gpu")?.let { "g${glyph(it)}" },
+            pct(message, "ram")?.let { "r${glyph(it)}" },
+        ).joinToString(sep).ifEmpty { null }
+    override fun format(message: String): String = triple(message, "") ?: message.take(6)
+    override fun longFormat(message: String): String? = triple(message, " ")
+    override fun iconRes(message: String): Int {
+        fun num(k: String) = runCatching {
+            Json.parseToJsonElement(message).jsonObject[k]?.jsonPrimitive?.content?.toDoubleOrNull()?.toInt()
+        }.getOrNull()
+        val tempCritical = (num("tg")?.let { it >= 90 } == true) || (num("tc")?.let { it >= 95 } == true)
+        val loadHigh = listOfNotNull(pct(message, "cpu"), pct(message, "gpu"),
+            pct(message, "ram"), pct(message, "vram")).any { it > 90 }
+        return when {
+            tempCritical -> com.emotiveautomaton.wristwork.R.drawable.ic_chip_crit
+            loadHigh -> com.emotiveautomaton.wristwork.R.drawable.ic_chip_alert
+            else -> com.emotiveautomaton.wristwork.R.drawable.ic_chip
+        }
+    }
     override fun gaugeValue(message: String): Float? =
         listOfNotNull(pct(message, "cpu"), pct(message, "gpu"), pct(message, "ram"))
             .maxOrNull()?.toFloat()
