@@ -42,6 +42,13 @@ import okhttp3.Request
 /** One reading of the rig: epoch seconds + integer percents (0-99). */
 private data class Reading(val t: Long, val cpu: Int?, val gpu: Int?, val ram: Int?)
 
+/** One process row: name plus its own cpu/gpu/ram percent of the whole machine. */
+private data class Proc(val name: String, val c: Int, val g: Int, val r: Int)
+
+/** Fixed-width row so the three number columns align down the list (8-char name, 3 x 3-char). */
+private fun procLine(name: String, c: String, g: String, r: String): String =
+    name.take(8).padEnd(8) + c.padStart(3) + g.padStart(3) + r.padStart(3)
+
 /**
  * The rig tap-frame: three 6-hour percent graphs (cpu/gpu/ram) stacked top-down, then the
  * latest top-processes list, all in one scrollable column. History comes straight from the
@@ -55,7 +62,7 @@ class RigDetailActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 var readings by remember { mutableStateOf<List<Reading>>(emptyList()) }
-                var procs by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
+                var procs by remember { mutableStateOf<List<Proc>>(emptyList()) }
                 var status by remember { mutableStateOf("loading…") }
                 LaunchedEffect(Unit) {
                     withContext(Dispatchers.IO) {
@@ -81,26 +88,28 @@ class RigDetailActivity : ComponentActivity() {
                     Graph("gpu", readings.mapNotNull { r -> r.gpu?.let { r.t to it } }, Color(0xFF7FE08A))
                     Graph("ram", readings.mapNotNull { r -> r.ram?.let { r.t to it } }, Color(0xFFFFB36B))
                     Spacer(Modifier.height(10.dp))
-                    procs.forEach { (name, pct) ->
-                        Row(Modifier.fillMaxWidth()) {
-                            Text(name, fontSize = 12.sp, fontFamily = FontFamily.Monospace,
-                                modifier = Modifier.weight(1f))
-                            Text("$pct", fontSize = 12.sp, fontFamily = FontFamily.Monospace)
-                        }
+                    if (procs.isNotEmpty()) {
+                        Text(procLine("", "c", "g", "r"), fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace, color = Color(0xFF9EB8D8))
                     }
-                    Spacer(Modifier.height(30.dp))
+                    procs.forEach { pr ->
+                        Text(procLine(pr.name, "${pr.c}", "${pr.g}", "${pr.r}"),
+                            fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                    }
+                    // Round screen: the bottom of the scroll needs clearance to clear the arc.
+                    Spacer(Modifier.height(70.dp))
                 }
             }
         }
     }
 
     /** Pull the last 6 h of rig messages off the bus; newest message with procs feeds the list. */
-    private fun fetch(): Pair<List<Reading>, List<Pair<String, Int>>> {
+    private fun fetch(): Pair<List<Reading>, List<Proc>> {
         val url = "${NtfyClient.baseUrl}/${BuildConfig.TOPIC_RIG}/json?poll=1&since=6h"
         val body = NtfyClient.http.newCall(Request.Builder().url(url).build()).execute()
             .use { if (it.isSuccessful) it.body.string() else "" }
         val readings = mutableListOf<Reading>()
-        var procs: List<Pair<String, Int>> = emptyList()
+        var procs: List<Proc> = emptyList()
         for (line in body.lines().filter { it.isNotBlank() }) {
             val o = runCatching { Json.parseToJsonElement(line).jsonObject }.getOrNull() ?: continue
             if (o["event"]?.jsonPrimitive?.content != "message") continue
@@ -114,7 +123,9 @@ class RigDetailActivity : ComponentActivity() {
                 runCatching {
                     procs = pl.jsonArray.map { e ->
                         val a = e.jsonArray
-                        a[0].jsonPrimitive.content to a[1].jsonPrimitive.content.toDouble().toInt().coerceIn(0, 99)
+                        fun v(i: Int) = a.getOrNull(i)?.jsonPrimitive?.content?.toDoubleOrNull()
+                            ?.toInt()?.coerceIn(0, 99) ?: 0
+                        Proc(a[0].jsonPrimitive.content, v(1), v(2), v(3))
                     }
                 }
             }

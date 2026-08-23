@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
+import androidx.wear.watchface.complications.data.LongTextComplicationData
 import androidx.wear.watchface.complications.data.NoDataComplicationData
 import androidx.wear.watchface.complications.data.PlainComplicationText
 import androidx.wear.watchface.complications.data.RangedValueComplicationData
@@ -96,6 +97,12 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
     /** Subclasses may supply a 0-99 gauge value for RANGED_VALUE slots; null = unsupported. */
     open fun gaugeValue(message: String): Float? = null
 
+    /** Optional second line for SHORT_TEXT slots (faces place/truncate it as they see fit). */
+    open fun titleText(message: String): String? = null
+
+    /** Longer rendering for LONG_TEXT-capable slots; defaults to the short form. */
+    open fun longFormat(message: String): String? = format(message)
+
     private fun tapIntent(): android.app.PendingIntent? = tapActivity()?.let {
         android.app.PendingIntent.getActivity(
             this, 0,
@@ -112,11 +119,22 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
         val shown = if (age > Duration.ofHours(2)) "(${short.lowercase()})" else short
         val desc = PlainComplicationText.Builder("$topic: $shown").build()
         return when (type) {
-            ComplicationType.SHORT_TEXT ->
-                ShortTextComplicationData.Builder(
+            ComplicationType.SHORT_TEXT -> {
+                val b = ShortTextComplicationData.Builder(
                     text = PlainComplicationText.Builder(shown).build(),
                     contentDescription = desc,
+                ).setTapAction(tapIntent())
+                titleText(payload)?.let { b.setTitle(PlainComplicationText.Builder(it).build()) }
+                b.build()
+            }
+            ComplicationType.LONG_TEXT -> {
+                val long = longFormat(payload) ?: return NoDataComplicationData()
+                val shownLong = if (age > Duration.ofHours(2)) "(${long.lowercase()})" else long
+                LongTextComplicationData.Builder(
+                    text = PlainComplicationText.Builder(shownLong).build(),
+                    contentDescription = desc,
                 ).setTapAction(tapIntent()).build()
+            }
             ComplicationType.RANGED_VALUE -> {
                 val v = gaugeValue(payload) ?: return null
                 RangedValueComplicationData.Builder(
@@ -156,6 +174,12 @@ class RigComplicationService : ChannelComplicationService() {
             pct(message, "cpu")?.let { "c$it" },
             pct(message, "gpu")?.let { "g$it" },
         ).joinToString("").ifEmpty { message.take(6) }
+    override fun longFormat(message: String): String? =
+        listOfNotNull(
+            pct(message, "cpu")?.let { "c$it" },
+            pct(message, "gpu")?.let { "g$it" },
+            pct(message, "ram")?.let { "r$it" },
+        ).joinToString("-").ifEmpty { null }
     override fun gaugeValue(message: String): Float? =
         listOfNotNull(pct(message, "cpu"), pct(message, "gpu"), pct(message, "ram"))
             .maxOrNull()?.toFloat()

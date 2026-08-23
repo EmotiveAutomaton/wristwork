@@ -23,11 +23,19 @@ hold (immutable raw data, no secrets in git, battery < 3%/day, no services/alarm
 - Every complication tap opens a single full-screen frame (back-swipe closes); one frame, no
   navigation tree.
 
-**rig** (design pass done 2026-08-23): face `c32g91` (cpu/gpu percent), or a RANGED_VALUE gauge
-slot showing the busiest resource on faces that support arcs. Tap-frame: three stacked 6 h percent
-graphs (cpu/gpu/ram, ~5 min resolution — read straight from the bus cache, nothing stored), then
-the top-5 processes by CPU share. Feeder posts every 5 min flat:
-`{"cpu":n,"ram":n,"gpu":n,"procs":[["name",pct],...]}`.
+**rig** (design pass 2026-08-23, iterating): three renderings, the slot decides —
+SHORT_TEXT `c44g89` (7-char hard cap: cpu+gpu only; a title-line experiment for ram truncated
+badly on the owner's face and was reverted), LONG_TEXT `c44-g89-r65` (full triple, hyphenated,
+on slots that support it), RANGED_VALUE gauge (busiest resource's percent as an arc).
+Tap-frame: three stacked 6 h percent graphs (cpu blue / gpu green / ram orange, ~5 min
+resolution, read straight from the bus cache — nothing stored), then the top-5 processes with
+aligned c/g/r columns (each process's own percent of the whole machine) under a header, extra
+black below so the round screen clips nothing. Processes rank by their busiest resource, so a
+GPU-bound job with idle CPU still surfaces. Feeder posts every 5 min flat:
+`{"cpu":n,"ram":n,"gpu":n,"procs":[["name",c,g,r],...]}`; per-process GPU comes from Windows
+GPU Engine counters (Task Manager's numbers — nvidia's own per-process view is blocked on WDDM);
+bursty GPU is sampled twice, max kept. Known jitter: per-process CPU is a 1 s window and can
+read low against the total.
 
 **state / agents / printer:** awaiting their design passes. Printer face stays invisible while
 idle (by design). State face currently shows the state code alone; tap opens the 2x4 tag grid
