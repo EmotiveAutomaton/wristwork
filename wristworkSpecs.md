@@ -23,21 +23,29 @@ hold (immutable raw data, no secrets in git, battery < 3%/day, no services/alarm
 - Every complication tap opens a single full-screen frame (back-swipe closes); one frame, no
   navigation tree.
 
-**rig** (design pass 2026-08-23, iterating): three renderings, the slot decides —
-SHORT_TEXT `c44g89` (7-char hard cap: cpu+gpu only; a title-line experiment for ram truncated
-badly on the owner's face and was reverted), LONG_TEXT `c44-g89-r65` (full triple, hyphenated,
-on slots that support it), RANGED_VALUE gauge (busiest resource's percent as an arc).
-Tap-frame: three stacked 6 h percent graphs (cpu blue / gpu green / ram orange, ~5 min
-resolution, read straight from the bus cache — nothing stored), then the top-5 processes with
-aligned c/g/r columns (each process's own percent of the whole machine) under a header, extra
-black below so the round screen clips nothing. Processes rank by their busiest resource, so a
-GPU-bound job with idle CPU still surfaces. Feeder posts every 5 min flat:
-`{"cpu":n,"ram":n,"gpu":n,"procs":[["name",c,g,r],...]}`; per-process GPU comes from Windows
-GPU Engine counters (Task Manager's numbers — nvidia's own per-process view is blocked on WDDM);
-bursty GPU is sampled twice, max kept. Known jitter: per-process CPU is a 1 s window and can
-read low against the total.
+**rig** (design pass 2026-08-23, iteration 3): face renders block-glyph usage — `C▁G▅R▇`,
+one glyph per resource at quintile resolution (▁▃▅▇), the top quintile becoming `!`; glyphs are
+concatenated (6 chars) or space-separated on wider slots. A monochrome CPU-chip icon rides the
+line: plain normally, one exclamation badge when any resource > 90%, three when a temperature is
+critical. RANGED_VALUE gauge (busiest resource) still offered. **The 7-char question, settled:**
+SHORT_TEXT text is capped at 7, but the slot also has a separate TITLE field, and the owner's
+face draws `title - text` on one visual line — that is where the earlier extra room came from, not
+an overflow. Tap-frame: five stacked 6 h charts — cpu / gpu / ram / vram percent, then all
+temperatures superimposed on one 0-100 degC chart (gpu red, cpu amber) — then the top-10 processes
+with a wider name column and c/g/r number columns tinted white->series-color as each value climbs
+to 99. Charts sit inside the round margins; extra black below clears the arc. Feeder posts every
+5 min: `{"cpu,ram,gpu,vram,tg,tc, procs:[[name,c,g,r] x10]}`; per-process GPU from Windows GPU
+Engine counters; bursty GPU sampled twice, max kept. **Temperature alert:** gpu >= 90 C or
+cpu >= 95 C posts a high-priority message to the `agents` topic, once per excursion, re-armed on
+cooldown. Scheduled feeders run through a windowless VBScript wrapper (`tools/rig/run_hidden.vbs`)
+so no console flashes. Known jitter: per-process CPU is a 1 s window, can read low vs the total.
 
-**state / agents / printer:** awaiting their design passes. Printer face stays invisible while
+**agents** (2026-08-23): face shows the name of the most recently finished project — parsed from
+`done: {project}` — as many characters as the slot allows (`SOUNDIN…` for SoundingLine on a
+7-char slot; full name on LONG_TEXT slots). A pending "needs input" still shows `INPUT`. This
+topic also carries the rig temperature alerts.
+
+**state / printer:** awaiting their design passes. Printer face stays invisible while
 idle (by design). State face currently shows the state code alone; tap opens the 2x4 tag grid
 (SEEK RAGE / FEAR LUST / CARE GRIEF / PLAY OTHER + "already noticed?" toggle + optional mic note).
 
