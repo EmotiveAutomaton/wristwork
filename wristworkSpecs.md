@@ -14,6 +14,10 @@ it, this section wins. Owner sets design at a high level; implementation detail 
 append to `labels.jsonl` on the NAS, mirrored nightly to the workstation. All laws from the runbook
 hold (immutable raw data, no secrets in git, battery < 3%/day, no services/alarms/wake locks).
 
+**Shared frame look (2026-08-23):** every tap-frame renders in the watch face's own font
+(Google Sans via the device font family, silent fallback to system default; monospace stays for
+aligned tables) through one shared theme (`app/.../ui/Theme.kt`).
+
 **Faces (v2, in flight — one-by-one design passes):**
 - All numeric readings are integer percent of the machine's maximum, capped at 99.
 - Age counters are OFF face-wide for now; reconsidered per complication in its pass. Staleness
@@ -23,9 +27,10 @@ hold (immutable raw data, no secrets in git, battery < 3%/day, no services/alarm
 - Every complication tap opens a single full-screen frame (back-swipe closes); one frame, no
   navigation tree.
 
-**rig** (design pass 2026-08-23, iteration 5): graph colors remapped by owner — cpu green,
-gpu blue sharing one chart with vram orange (both current values on the right in their colors),
-ram purple; the table's number tints follow. Temp chart: label bright red like the warning line,
+**rig** (design pass 2026-08-23, iteration 6): graph colors remapped by owner — cpu green,
+gpu blue sharing one chart with vram orange (label rendered per-word in its series color with a
+blended middle dot; both current values on the right in their colors), ram purple; the table's
+number tints follow. The temp chart shows colorized current values only (no series names). Temp chart: label bright red like the warning line,
 temperature lines full-opacity in their resource colors (gpu blue). CPU temperature flows via
 LibreHardwareMonitor (portable, `~/Tools/LibreHardwareMonitor`, elevated, web server :8085; the
 feeder walks its sensor tree — Ryzen Package/Tctl). NOTE: the 7900X rides 95 C by design under
@@ -53,11 +58,15 @@ cpu >= 95 C posts a high-priority message to the `agents` topic, once per excurs
 cooldown. Scheduled feeders run through a windowless VBScript wrapper (`tools/rig/run_hidden.vbs`)
 so no console flashes. Known jitter: per-process CPU is a 1 s window, can read low vs the total.
 
-**agents** (2026-08-23, iteration 4): face shows a two-person icon then `WRI·18M` — first three
-letters of the most recent finished project, middle dot, auto-ticking age. Three characters is
-the real budget: with an icon present this face DROPS the title field entirely, leaving one
-~7-char text field, and anything longer gets ellipsized with the age (the ticking part) falling
-off first. Slots without the icon-drop rule get more; LONG_TEXT slots get the full name. The M/H/D case lives inside the platform's auto-ticking time format and
+**agents** (2026-08-23, iteration 5): face shows a two-person icon then `WRI·18M` — the most
+recent finished project, middle dot, auto-ticking age. The name budget adapts to the age's
+width: a short age ("7M", "2H", "3D") buys a fourth letter; two-digit ages leave three. (With an
+icon this face drops the title field entirely, leaving one ~7-char text field — anything longer
+ellipsizes with the age falling off first.) The Stop hook now appends a one-line summary of what
+the session finished ("done: project: summary" — extracted from the transcript's final assistant
+message); the tap-frame shows it as each chip's second line, with `project · age` as the first.
+Frame window is 24 h but NEVER renders empty: if the day is quiet it falls back to the single
+most recent finish however old (the bus cache was raised from 24 h to 30 days for this). The M/H/D case lives inside the platform's auto-ticking time format and
 cannot be styled; the alternative (caseless superscript ᵐʰᵈ) would cost the auto-tick, going
 stale up to 15 min between refreshes — not taken. "needs input" still shows INPUT; "needs input" still shows
 INPUT. Tap-frame: the latest finish per project from the last 24 h, deduped (three SoundingLine
@@ -67,9 +76,14 @@ installed; no public per-session deep links exist). This topic also carries the 
 alerts. Non-Claude agents: anything that can run a curl can post here (Codex CLI's notify hook
 qualifies); the ChatGPT consumer app exposes no hooks or history API and cannot be wired.
 
-**printer** (2026-08-23, first pass — verified against two live prints): face shows a printer
+**printer** (2026-08-23, second pass — verified against two live prints): face shows a printer
 icon + progress percent, appears only while printing (watched it materialize when a print
-started). Tap-frame talks to PrusaLink directly over the LAN (digest auth on-watch):
+started). Frame v2: thumbnail, print name, `state · NN%` headline using PrusaLink's detailed
+state text when it differs ("absorbing heat" — a known non-error stall state, no alert wanted),
+a timeline bar (start clock-time left, total expected duration right, "Xm left" trailing the
+fill; appears once the printer reports time estimates), one combined temperature line
+(nozzle/bed with targets), and the loaded material (from the legacy /api/printer endpoint).
+Dropped by owner: z-height, speed, fans, elapsed. Tap-frame talks to PrusaLink directly over the LAN (digest auth on-watch):
 the job's own embedded thumbnail — the picture of what's printing — then print name, state,
 progress, remaining/elapsed, nozzle and bed temps with targets, z-height, speed, both fans,
 refreshing every 5 s while open. Printer host + API key ride the gitignored config into

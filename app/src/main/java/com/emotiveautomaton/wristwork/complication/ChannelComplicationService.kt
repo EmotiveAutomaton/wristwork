@@ -103,6 +103,20 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
     /** Optional monochrome icon (face-tinted); may vary with the payload (thresholds). */
     open fun iconRes(message: String): Int? = null
 
+    /** Name chars fitting beside the dot and age in a ~7-char field: a short age ("7M","2H","3D")
+     *  buys a fourth letter; two-digit ages leave three. Ages tick between renders, so the budget
+     *  follows what the age looks like for most of the ~15-min refresh window. */
+    protected fun nameBudget(epochS: Long): Int {
+        val mins = (java.time.Instant.now().epochSecond - epochS) / 60
+        return when {
+            mins < 60 -> 3            // minutes tick fast; "17M" is the common case
+            mins < 10 * 60 -> 4       // "2H" stays two chars for hours at a time
+            mins < 24 * 60 -> 3       // "14H"
+            mins < 10 * 24 * 60 -> 4  // "3D"
+            else -> 3
+        }
+    }
+
     /** When true, SHORT_TEXT text becomes the auto-ticking age and format() moves to the title;
      *  LONG_TEXT wraps the age into "{longFormat} - {age}". Per-complication choice (owner). */
     open fun ageAsText(): Boolean = false
@@ -143,7 +157,7 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
                         androidx.wear.watchface.complications.data.TimeDifferenceStyle.SHORT_SINGLE_UNIT,
                         androidx.wear.watchface.complications.data.CountUpTimeReference(
                             Instant.ofEpochSecond(epochS)),
-                    ).setText("$shown·^1").build()
+                    ).setText("${shown.take(nameBudget(epochS))}·^1").build()
                 else PlainComplicationText.Builder(shown).build()
                 val b = ShortTextComplicationData.Builder(text = textPart, contentDescription = desc)
                     .setTapAction(tapIntent())
@@ -198,7 +212,7 @@ class AgentsComplicationService : ChannelComplicationService() {
             m.startsWith("needs input", ignoreCase = true) -> "INPUT"
             // 4 chars, clipped by us: the face ellipsizes anything longer and the age (the
             // part that ticks) is what falls off the end. No "..." ever.
-            else -> (project(m) ?: m).take(3)
+            else -> (project(m) ?: m).take(8)  // clipped at render by nameBudget()
         }
     }
     override fun longFormat(message: String): String? {

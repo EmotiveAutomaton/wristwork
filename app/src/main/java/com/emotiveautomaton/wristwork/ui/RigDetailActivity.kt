@@ -30,7 +30,6 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import com.emotiveautomaton.wristwork.BuildConfig
 import com.emotiveautomaton.wristwork.net.NtfyClient
@@ -70,7 +69,7 @@ class RigDetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            WristTheme {
                 var readings by remember { mutableStateOf<List<Reading>>(emptyList()) }
                 var procs by remember { mutableStateOf<List<Proc>>(emptyList()) }
                 var status by remember { mutableStateOf("loading…") }
@@ -96,13 +95,17 @@ class RigDetailActivity : ComponentActivity() {
                     }
                     Graph("cpu", readings.mapNotNull { r -> r.cpu?.let { r.t to it } }, CPU_COLOR)
                     MultiGraph(
-                        "gpu · vram",
+                        "gpu·vram",
                         listOf(
                             Triple("gpu", GPU_COLOR, readings.mapNotNull { r -> r.gpu?.let { r.t to it } }),
                             Triple("vram", VRAM_COLOR, readings.mapNotNull { r -> r.vram?.let { r.t to it } }),
                         ).filter { it.third.isNotEmpty() },
                         showSeriesLabels = false,
-                        labelColor = GPU_COLOR,
+                        labelSegments = listOf(
+                            "gpu" to GPU_COLOR,
+                            "\u00b7" to lerp(GPU_COLOR, VRAM_COLOR, 0.5f),
+                            "vram" to VRAM_COLOR,
+                        ),
                     )
                     Graph("ram", readings.mapNotNull { r -> r.ram?.let { r.t to it } }, RAM_COLOR)
                     MultiGraph(
@@ -111,6 +114,7 @@ class RigDetailActivity : ComponentActivity() {
                             Triple("gpu", GPU_COLOR, readings.mapNotNull { r -> r.tg?.let { r.t to it } }),
                             Triple("cpu", CPU_COLOR, readings.mapNotNull { r -> r.tc?.let { r.t to it } }),
                         ).filter { it.third.isNotEmpty() },
+                        showSeriesLabels = false,
                         labelColor = WARN_COLOR,
                         warnY = 90,
                     )
@@ -202,12 +206,18 @@ private fun MultiGraph(
     showSeriesLabels: Boolean = true,
     labelColor: Color? = null,
     warnY: Int? = null,
+    labelSegments: List<Pair<String, Color>>? = null,
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth()) {
-            Text(label, fontSize = 11.sp,
-                color = labelColor ?: series.firstOrNull()?.second ?: HEADER_COLOR,
-                modifier = Modifier.weight(1f))
+            if (labelSegments != null) {
+                labelSegments.forEach { (t, c) -> Text(t, fontSize = 11.sp, color = c) }
+                Spacer(Modifier.weight(1f))
+            } else {
+                Text(label, fontSize = 11.sp,
+                    color = labelColor ?: series.firstOrNull()?.second ?: HEADER_COLOR,
+                    modifier = Modifier.weight(1f))
+            }
             series.forEachIndexed { i, (name, color, pts) ->
                 val v = pts.lastOrNull()?.second?.toString() ?: "–"
                 val sep = if (i > 0) "  " else ""

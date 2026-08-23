@@ -27,7 +27,7 @@ $DOCKER run -d --name wristwork-ntfy --restart=always --network wristwork-net \
   -v "$DATA_ROOT/ntfy-cache:/var/cache/ntfy" \
   -e NTFY_BASE_URL="$NTFY_BASE_URL" \
   -e NTFY_CACHE_FILE=/var/cache/ntfy/cache.db \
-  -e NTFY_CACHE_DURATION=24h \
+  -e NTFY_CACHE_DURATION=720h \
   binwiederhier/ntfy serve
 
 # The label archiver: every message on topic `tags` becomes one JSON line in labels.jsonl.

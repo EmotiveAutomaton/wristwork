@@ -5,6 +5,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,12 +28,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import com.emotiveautomaton.wristwork.net.PrusaClient
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -40,25 +44,27 @@ import kotlinx.serialization.json.jsonPrimitive
 
 private val HEADER_COLOR = Color(0xFF9EB8D8)
 private val ACCENT = Color(0xFFFFB36B)
+private val BAR_TRACK = Color(0xFF2A2F3A)
 
 private data class PrinterView(
-    val state: String, val progress: Int?, val remainingS: Long?, val printingS: Long?,
+    val state: String, val stateText: String?, val progress: Int?,
+    val remainingS: Long?, val printingS: Long?,
     val nozzle: Double?, val nozzleTarget: Double?, val bed: Double?, val bedTarget: Double?,
-    val z: Double?, val speed: Int?, val fanHotend: Int?, val fanPrint: Int?,
-    val displayName: String?, val thumbPath: String?,
+    val material: String?, val displayName: String?, val thumbPath: String?,
 )
 
 /**
- * The printer tap-frame: the job's own embedded thumbnail (the picture of what's printing),
- * then a rolling status — progress, times, temps, z-height, speed, fans — refreshed every 5 s
- * while the frame is open. Talks to PrusaLink directly over the LAN with digest auth.
+ * The printer tap-frame v2: thumbnail, print name, `state · NN%` headline (the state text is the
+ * detailed one — "absorbing heat" — when PrusaLink offers it), a timeline bar (start time on the
+ * left, total expected duration on the right, remaining following the fill), one temperature
+ * line, material. Refreshes every 5 s while open.
  */
 class PrinterDetailActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            WristTheme {
                 var v by remember { mutableStateOf<PrinterView?>(null) }
                 var thumb by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
                 var status by remember { mutableStateOf("loading…") }
@@ -93,28 +99,38 @@ class PrinterDetailActivity : ComponentActivity() {
                         Spacer(Modifier.height(6.dp))
                         Image(
                             it.asImageBitmap(), contentDescription = "print preview",
-                            modifier = Modifier.fillMaxWidth().height(110.dp),
+                            modifier = Modifier.fillMaxWidth().height(105.dp),
                             contentScale = ContentScale.Fit,
                         )
                     }
                     v?.let { p ->
                         p.displayName?.let {
-                            Text(cleanName(it), fontSize = 12.sp, color = Color.White, maxLines = 2)
+                            Text(cleanName(it), fontSize = 12.sp, color = Color.White, maxLines = 1)
                         }
                         Spacer(Modifier.height(4.dp))
-                        val head = p.state.lowercase() +
-                            (p.progress?.let { " · $it%" } ?: "")
-                        Text(head, fontSize = 16.sp, color = ACCENT)
-                        p.remainingS?.let { Line("remaining", fmtDur(it)) }
-                        p.printingS?.let { Line("elapsed", fmtDur(it)) }
-                        if (p.nozzle != null) Line("nozzle", "${p.nozzle.toInt()}°" +
-                            (p.nozzleTarget?.let { "/${it.toInt()}°" } ?: ""))
-                        if (p.bed != null) Line("bed", "${p.bed.toInt()}°" +
-                            (p.bedTarget?.let { "/${it.toInt()}°" } ?: ""))
-                        p.z?.let { Line("z", "${it} mm") }
-                        p.speed?.let { Line("speed", "$it%") }
-                        p.fanHotend?.let { Line("fan hotend", "$it rpm") }
-                        p.fanPrint?.let { Line("fan print", "$it rpm") }
+                        val headState = (p.stateText ?: p.state).lowercase()
+                        Text(headState + (p.progress?.let { " · $it%" } ?: ""), fontSize = 16.sp, color = ACCENT)
+                        if (p.printingS != null && p.remainingS != null) {
+                            Spacer(Modifier.height(6.dp))
+                            Timeline(p.printingS, p.remainingS)
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        if (p.nozzle != null || p.bed != null) {
+                            Row(Modifier.fillMaxWidth()) {
+                                Text("temp", fontSize = 12.sp, color = HEADER_COLOR, modifier = Modifier.weight(1f))
+                                val noz = p.nozzle?.let { "nozzle ${it.toInt()}°" +
+                                    (p.nozzleTarget?.takeIf { t -> t > 0 }?.let { t -> "/${t.toInt()}°" } ?: "") }
+                                val bed = p.bed?.let { "bed ${it.toInt()}°" +
+                                    (p.bedTarget?.takeIf { t -> t > 0 }?.let { t -> "/${t.toInt()}°" } ?: "") }
+                                Text(listOfNotNull(noz, bed).joinToString("  "), fontSize = 12.sp, color = Color.White)
+                            }
+                        }
+                        p.material?.let {
+                            Row(Modifier.fillMaxWidth()) {
+                                Text("material", fontSize = 12.sp, color = HEADER_COLOR, modifier = Modifier.weight(1f))
+                                Text(it, fontSize = 12.sp, color = Color.White)
+                            }
+                        }
                     }
                     Spacer(Modifier.height(70.dp))
                 }
@@ -129,7 +145,6 @@ class PrinterDetailActivity : ComponentActivity() {
         val job = so["job"]?.jsonObject
         fun d(o: kotlinx.serialization.json.JsonObject?, k: String) =
             o?.get(k)?.jsonPrimitive?.content?.toDoubleOrNull()
-        // Job detail (file name + thumbnail ref) only exists while a job is active.
         var displayName: String? = null; var thumbPath: String? = null
         if (job != null) {
             PrusaClient.getText("/api/v1/job")?.let { jt ->
@@ -140,32 +155,57 @@ class PrinterDetailActivity : ComponentActivity() {
                 }
             }
         }
+        // Legacy endpoint: the human-readable state ("Absorbing heat") and the loaded material.
+        var stateText: String? = null; var material: String? = null
+        PrusaClient.getText("/api/printer")?.let { lt ->
+            runCatching { Json.parseToJsonElement(lt).jsonObject }.getOrNull()?.let { lo ->
+                stateText = lo["state"]?.jsonObject?.get("text")?.jsonPrimitive?.content
+                material = lo["telemetry"]?.jsonObject?.get("material")?.jsonPrimitive?.content
+            }
+        }
         return PrinterView(
             state = printer?.get("state")?.jsonPrimitive?.content ?: "?",
+            stateText = stateText,
             progress = d(job, "progress")?.toInt(),
             remainingS = d(job, "time_remaining")?.toLong(),
             printingS = d(job, "time_printing")?.toLong(),
             nozzle = d(printer, "temp_nozzle"), nozzleTarget = d(printer, "target_nozzle"),
             bed = d(printer, "temp_bed"), bedTarget = d(printer, "target_bed"),
-            z = d(printer, "axis_z"), speed = d(printer, "speed")?.toInt(),
-            fanHotend = d(printer, "fan_hotend")?.toInt(), fanPrint = d(printer, "fan_print")?.toInt(),
-            displayName = displayName, thumbPath = thumbPath,
+            material = material, displayName = displayName, thumbPath = thumbPath,
         )
     }
 
-    /** "Benchy_Rules_0.4n_0.2mm_PLA_COREONE_14m.bgcode" -> "Benchy Rules" (settings stay on the line below). */
     private fun cleanName(n: String): String = n.substringBeforeLast('.').replace('_', ' ')
+}
 
-    private fun fmtDur(s: Long): String {
-        val h = s / 3600; val m = (s % 3600) / 60
-        return if (h > 0) "${h}h ${m}m" else "${m}m ${s % 60}s"
+/** Start time on the left, total expected duration on the right, remaining trailing the fill. */
+@Composable
+private fun Timeline(printingS: Long, remainingS: Long) {
+    val totalS = (printingS + remainingS).coerceAtLeast(1)
+    val frac = (printingS.toFloat() / totalS).coerceIn(0f, 1f)
+    val started = Instant.now().minusSeconds(printingS).atZone(ZoneId.systemDefault())
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth()) {
+            Text(started.format(DateTimeFormatter.ofPattern("H:mm")), fontSize = 11.sp, color = HEADER_COLOR,
+                modifier = Modifier.weight(1f))
+            Text(fmtDur(totalS), fontSize = 11.sp, color = HEADER_COLOR)
+        }
+        Box(Modifier.fillMaxWidth().height(8.dp).background(BAR_TRACK, RoundedCornerShape(4.dp))) {
+            Box(
+                Modifier.fillMaxWidth(frac.coerceAtLeast(0.02f)).height(8.dp)
+                    .background(ACCENT, RoundedCornerShape(4.dp))
+            )
+        }
+        // Remaining, trailing the fill edge (clamped so it never falls off the sides).
+        Row(Modifier.fillMaxWidth()) {
+            if (frac > 0.05f) Spacer(Modifier.weight(frac.coerceAtMost(0.75f)))
+            Text("${fmtDur(remainingS)} left", fontSize = 11.sp, color = ACCENT)
+            Spacer(Modifier.weight((1f - frac).coerceAtLeast(0.05f)))
+        }
     }
 }
 
-@Composable
-private fun Line(label: String, value: String) {
-    Row(Modifier.fillMaxWidth()) {
-        Text(label, fontSize = 12.sp, color = HEADER_COLOR, modifier = Modifier.weight(1f))
-        Text(value, fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = Color.White)
-    }
+private fun fmtDur(s: Long): String {
+    val h = s / 3600; val m = (s % 3600) / 60
+    return if (h > 0) "${h}h ${m}m" else "${m}m"
 }

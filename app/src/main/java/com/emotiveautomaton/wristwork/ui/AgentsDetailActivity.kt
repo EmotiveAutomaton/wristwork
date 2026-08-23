@@ -25,7 +25,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
-import androidx.wear.compose.material.MaterialTheme
 import androidx.wear.compose.material.Text
 import androidx.wear.remote.interactions.RemoteActivityHelper
 import com.emotiveautomaton.wristwork.BuildConfig
@@ -39,7 +38,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.Request
 
 /** One finished-project entry: latest completion per project, newest first. */
-private data class Finish(val project: String, val epochS: Long)
+private data class Finish(val project: String, val epochS: Long, val desc: String?)
 
 /**
  * The agents tap-frame: the most recent finish per project (deduped — three SoundingLine
@@ -53,13 +52,13 @@ class AgentsDetailActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            MaterialTheme {
+            WristTheme {
                 var finishes by remember { mutableStateOf<List<Finish>>(emptyList()) }
                 var status by remember { mutableStateOf("loading…") }
                 LaunchedEffect(Unit) {
                     withContext(Dispatchers.IO) {
                         runCatching { fetch() }
-                            .onSuccess { finishes = it; status = if (it.isEmpty()) "no finishes in 24h" else "" }
+                            .onSuccess { finishes = it; status = if (it.isEmpty()) "no finishes yet" else "" }
                             .onFailure { status = "fetch failed" }
                     }
                 }
@@ -76,8 +75,10 @@ class AgentsDetailActivity : ComponentActivity() {
                         Spacer(Modifier.height(6.dp))
                         Chip(
                             onClick = { openClaudeOnPhone() },
-                            label = { Text(f.project, fontSize = 13.sp, maxLines = 1) },
-                            secondaryLabel = { Text(relAge(f.epochS), fontSize = 11.sp) },
+                            label = { Text("${f.project} \u00b7 ${relAge(f.epochS)}", fontSize = 13.sp, maxLines = 1) },
+                            secondaryLabel = f.desc?.let { d ->
+                                { Text(d, fontSize = 10.sp, maxLines = 2) }
+                            },
                             colors = ChipDefaults.secondaryChipColors(),
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -90,20 +91,26 @@ class AgentsDetailActivity : ComponentActivity() {
 
     /** Latest `done: {project}` per project off the bus cache, newest first. */
     private fun fetch(): List<Finish> {
-        val url = "${NtfyClient.baseUrl}/${BuildConfig.TOPIC_AGENTS}/json?poll=1&since=24h"
+        val url = "${NtfyClient.baseUrl}/${BuildConfig.TOPIC_AGENTS}/json?poll=1&since=720h"
         val body = NtfyClient.http.newCall(Request.Builder().url(url).build()).execute()
             .use { if (it.isSuccessful) it.body.string() else "" }
-        val latest = LinkedHashMap<String, Long>()
+        val latest = LinkedHashMap<String, Finish>()
         for (line in body.lines().filter { it.isNotBlank() }) {
             val o = runCatching { Json.parseToJsonElement(line).jsonObject }.getOrNull() ?: continue
             if (o["event"]?.jsonPrimitive?.content != "message") continue
             val t = o["time"]?.jsonPrimitive?.content?.toLongOrNull() ?: continue
-            val msg = o["message"]?.jsonPrimitive?.content ?: continue
-            val project = Regex("^done:\\s*(.+)$", RegexOption.IGNORE_CASE)
-                .find(msg.trim())?.groupValues?.get(1)?.trim() ?: continue
-            if (t >= (latest[project] ?: 0)) latest[project] = t
+            val msg = o["message"]?.jsonPrimitive?.content?.trim() ?: continue
+            // "done: project" or "done: project: what happened"
+            val m = Regex("^done:\\s*([^:]+?)(?::\\s*(.+))?$", RegexOption.IGNORE_CASE).find(msg) ?: continue
+            val project = m.groupValues[1].trim()
+            val desc = m.groupValues.getOrNull(2)?.trim()?.ifEmpty { null }
+            if (t >= (latest[project]?.epochS ?: 0)) latest[project] = Finish(project, t, desc)
         }
-        return latest.entries.sortedByDescending { it.value }.map { Finish(it.key, it.value) }
+        val all = latest.values.sortedByDescending { it.epochS }
+        // Last 24 h; never empty — fall back to the single most recent finish however old.
+        val dayAgo = java.time.Instant.now().epochSecond - 24 * 3600
+        val recent = all.filter { it.epochS >= dayAgo }
+        return if (recent.isNotEmpty()) recent else all.take(1)
     }
 
     private fun relAge(epochS: Long): String {

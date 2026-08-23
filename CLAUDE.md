@@ -69,6 +69,10 @@ The owner is a collaborator. Agreement that is not earned costs them the one thi
 - **Staleness must never read as freshness.** Every channel complication renders age; stale dims.
 - **Phase 6 (interpretation layer) is gated. Build none of it.** Do not pre-subdivide SEEK.
 - **Line endings are LF** (`.gitattributes`), including shell scripts destined for Linux hosts.
+- **The living spec (`wristworkSpecs.md`) is updated in the same pass as the change it records.**
+  It is the collection of everything the owner has asked for and decided — extracted from
+  conversation so past requirements are not forgotten. Guidance more than law; chronology
+  imprecise by design; the original runbook below its divider stays untouched.
 - **Announce every change to this file in the reply that makes it.**
 
 ## Subagents — rationed
