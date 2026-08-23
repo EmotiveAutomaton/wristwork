@@ -32,8 +32,10 @@ pairing physiology-flagged moments against self-reported states.
   [not on the roadmap](https://community.fitbit.com/t5/Web-API-Development/Is-there-any-web-api-available-for-EDA-and-Stress/td-p/5475259).
 - The successor [Google Health API](https://developers.google.com/health/endpoints) (parity
   project for the Fitbit Web API) has no EDA/stress endpoints either.
-- The cEDA sensor itself is not exposed to third-party apps on the watch (*unverified but
-  near-certain; no public sensor type exists — worth one SensorManager enumeration probe*).
+- The cEDA sensor itself is sealed — **verified by sensor enumeration on this watch
+  (2026-08-23)**: a `Galvanic Skin Response` sensor (TI, `com.google.sensor.gsr`) exists but
+  requires `com.google.pixelwatch.permission.READ_PRIVATE_SENSORS`, a Pixel-Watch-private
+  permission third-party apps cannot hold.
 - EDA scan data explicitly [stays on the device](https://support.google.com/fitbit/answer/14237928).
 
 So the flags cannot be pulled. They might, however, be *caught in flight* — see Option A.
@@ -46,6 +48,7 @@ So the flags cannot be pulled. They might, however, be *caught in flight* — se
 | **[Health Services passive monitoring](https://developer.android.com/health-and-fitness/health-services)** (watch) | Continuous HR (batched), steps, calories; platform health events | `PassiveMonitoringClient`, batched off the MCU, delivered to our app in clumps | The one real battery cost. Google designed it MCU-batched specifically for low power; realistic low-single-digit %/day (*measure, don't trust*). Needs `BODY_SENSORS` + a passive listener — spec change |
 | **Health Connect** (phone) | What Fitbit/Pixel sync writes: resting HR, **HRV (nightly RMSSD)**, respiratory rate, SpO2, **skin temperature** (nightly delta), sleep stages, exercise sessions | Phone-side reader (we have no phone app — could be a small companion or a scheduled reader on this workstation is NOT possible; Health Connect is on-device only) | Free battery-wise (data already collected), but **nightly/summary granularity** — useless for moment-flagging, good for baselines and context. Requires building our first phone-side component |
 | **On-watch HR sensor, raw** | Moment-scale HR/HRV if we run our own detector | `MeasureClient` bursts or passive stream + our own anomaly detector | We own the algorithm (which is also the point: Fitbit's detector is theirs). Sustained sampling is the expensive mode; burst-on-schedule is cheaper |
+| **On-watch skin-temperature sensor** | Moment-scale skin temp — one of Fitbit's four body-response inputs | Direct sensor read behind `android.permission.health.READ_SKIN_TEMPERATURE` — a normal, grantable health permission (**verified present in this watch's sensor list**, TI part, wake-up variant included) | Same battery discipline as HR; makes our own detector a 2-of-4-signal approximation of Fitbit's (missing only sealed GSR and deriving HRV ourselves) |
 | **Manual (exists today)** | The human, tapping | The 2×4 grid | Zero cost, already shipped; loses the "unusual event" trigger entirely |
 
 ## Options, ranked by the build agent
