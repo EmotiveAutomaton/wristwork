@@ -136,6 +136,8 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
             ComplicationType.SHORT_TEXT -> {
                 // ageAsText: one combined text field "name·age" — the title field was what the
                 // face ellipsized ("SOUN..."); a single text renders as many chars as the slot fits.
+                // ageAsText: title carries "name·" (clipped by us, never face-ellipsized) and
+                // the text field carries the bare ticking age — two fields = two budgets.
                 val textPart = if (ageAsText())
                     androidx.wear.watchface.complications.data.TimeDifferenceComplicationText.Builder(
                         androidx.wear.watchface.complications.data.TimeDifferenceStyle.SHORT_SINGLE_UNIT,
@@ -194,7 +196,9 @@ class AgentsComplicationService : ChannelComplicationService() {
         val m = message.trim()
         return when {
             m.startsWith("needs input", ignoreCase = true) -> "INPUT"
-            else -> (project(m) ?: m).take(12)
+            // 4 chars, clipped by us: the face ellipsizes anything longer and the age (the
+            // part that ticks) is what falls off the end. No "..." ever.
+            else -> (project(m) ?: m).take(3)
         }
     }
     override fun longFormat(message: String): String? {

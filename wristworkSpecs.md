@@ -26,9 +26,11 @@ hold (immutable raw data, no secrets in git, battery < 3%/day, no services/alarm
 **rig** (design pass 2026-08-23, iteration 5): graph colors remapped by owner — cpu green,
 gpu blue sharing one chart with vram orange (both current values on the right in their colors),
 ram purple; the table's number tints follow. Temp chart: label bright red like the warning line,
-temperature lines full-opacity in their resource colors (gpu blue). CPU temperature is
-unreadable on this board without admin sensor tooling (LibreHardwareMonitor would expose it;
-owner decision) — the chart auto-includes it if the feeder ever reports it. Face renders
+temperature lines full-opacity in their resource colors (gpu blue). CPU temperature flows via
+LibreHardwareMonitor (portable, `~/Tools/LibreHardwareMonitor`, elevated, web server :8085; the
+feeder walks its sensor tree — Ryzen Package/Tctl). NOTE: the 7900X rides 95 C by design under
+sustained load, so the CPU alert fires once at the start of long heavy jobs — expected, not an
+emergency. LHM needs its logon task registered or CPU temp silently drops after reboot. Face renders
 circle-fill usage — `c◔ g◑ r◕`,
 one glyph per resource at quintile resolution (○◔◑◕ empty->three-quarter; the block glyphs sat
 below the text baseline and looked janky), the top quintile becoming `!` with its letter
@@ -51,9 +53,11 @@ cpu >= 95 C posts a high-priority message to the `agents` topic, once per excurs
 cooldown. Scheduled feeders run through a windowless VBScript wrapper (`tools/rig/run_hidden.vbs`)
 so no console flashes. Known jitter: per-process CPU is a 1 s window, can read low vs the total.
 
-**agents** (2026-08-23, iteration 3): face shows one combined text — project name (up to 12
-chars, no ellipsized title field) then a middle dot and the auto-ticking age (`wristwork·19M`) —
-plus a two-person icon. The M/H/D case lives inside the platform's auto-ticking time format and
+**agents** (2026-08-23, iteration 4): face shows a two-person icon then `WRI·18M` — first three
+letters of the most recent finished project, middle dot, auto-ticking age. Three characters is
+the real budget: with an icon present this face DROPS the title field entirely, leaving one
+~7-char text field, and anything longer gets ellipsized with the age (the ticking part) falling
+off first. Slots without the icon-drop rule get more; LONG_TEXT slots get the full name. The M/H/D case lives inside the platform's auto-ticking time format and
 cannot be styled; the alternative (caseless superscript ᵐʰᵈ) would cost the auto-tick, going
 stale up to 15 min between refreshes — not taken. "needs input" still shows INPUT; "needs input" still shows
 INPUT. Tap-frame: the latest finish per project from the last 24 h, deduped (three SoundingLine
@@ -63,8 +67,9 @@ installed; no public per-session deep links exist). This topic also carries the 
 alerts. Non-Claude agents: anything that can run a curl can post here (Codex CLI's notify hook
 qualifies); the ChatGPT consumer app exposes no hooks or history API and cannot be wired.
 
-**printer** (2026-08-23, first pass): face shows progress percent + a printer icon; still
-disappears when idle. Tap-frame talks to PrusaLink directly over the LAN (digest auth on-watch):
+**printer** (2026-08-23, first pass — verified against two live prints): face shows a printer
+icon + progress percent, appears only while printing (watched it materialize when a print
+started). Tap-frame talks to PrusaLink directly over the LAN (digest auth on-watch):
 the job's own embedded thumbnail — the picture of what's printing — then print name, state,
 progress, remaining/elapsed, nozzle and bed temps with targets, z-height, speed, both fans,
 refreshing every 5 s while open. Printer host + API key ride the gitignored config into
