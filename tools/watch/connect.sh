@@ -21,6 +21,12 @@ say_auth_hint() {
   echo "then: adb pair IP:PAIR_PORT CODE   (keep the dialog open until it says Paired)."
 }
 
+# Drop duplicate endpoints (manual IP + mDNS of the same watch confuses every adb call).
+dupes=$(adb devices | awk 'NR>1 && $2=="device" {print $1}' | wc -l)
+if [[ "$dupes" -gt 1 ]]; then
+  adb devices | awk 'NR>1 && $1 ~ /^[0-9]+\./ {print $1}' | while read -r ip_ep; do adb disconnect "$ip_ep" >/dev/null; done
+fi
+
 if connected; then adb devices -l | sed -n 2p; exit 0; fi
 
 try_connect() {

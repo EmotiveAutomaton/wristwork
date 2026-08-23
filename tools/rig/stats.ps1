@@ -36,7 +36,7 @@ try {
     $stack = New-Object System.Collections.Stack; $stack.Push($lhm)
     while ($stack.Count -gt 0 -and $null -eq $tc) {
         $n = $stack.Pop()
-        if ($n.Text -match '^(CPU Package|Core Average|Core \(Tctl' -and $n.Value -match '([0-9.]+)\s*°C') {
+        if ($n.Text -match '^(Package|CPU Package|Core \(Tctl)' -and $n.Value -match '^([0-9.]+)') {
             $tc = [math]::Round([double]$Matches[1])
         }
         foreach ($ch in @($n.Children)) { if ($null -ne $ch) { $stack.Push($ch) } }
