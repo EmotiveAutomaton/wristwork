@@ -89,7 +89,11 @@ progress, remaining/elapsed, nozzle and bed temps with targets, z-height, speed,
 refreshing every 5 s while open. Printer host + API key ride the gitignored config into
 BuildConfig (private debug APK only; never in git).
 
-**state:** awaiting its design pass. Printer face stays invisible while
+**state:** awaiting its design pass. The owner's direction (2026-08-23): it will interact with
+the health layer — capturing Fitbit Body Response flags and tagging them. Research, data-source
+costs, and ranked options live in `HEALTH_INTEGRATION.md` (top level), written for the owner's
+planning agent; the battery law is owner-authorized to bend for physiological collection if
+unavoidable (number pending measurement). Printer face stays invisible while
 idle (by design). State face currently shows the state code alone; tap opens the 2x4 tag grid
 (SEEK RAGE / FEAR LUST / CARE GRIEF / PLAY OTHER + "already noticed?" toggle + optional mic note).
 
