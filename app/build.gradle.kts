@@ -73,4 +73,5 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.work.runtime.ktx)
+    implementation(libs.wear.remote.interactions)
 }

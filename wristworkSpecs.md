@@ -23,15 +23,20 @@ hold (immutable raw data, no secrets in git, battery < 3%/day, no services/alarm
 - Every complication tap opens a single full-screen frame (back-swipe closes); one frame, no
   navigation tree.
 
-**rig** (design pass 2026-08-23, iteration 3): face renders block-glyph usage — `C▁G▅R▇`,
-one glyph per resource at quintile resolution (▁▃▅▇), the top quintile becoming `!`; glyphs are
-concatenated (6 chars) or space-separated on wider slots. A monochrome CPU-chip icon rides the
+**rig** (design pass 2026-08-23, iteration 4): face renders circle-fill usage — `c◔ g◑ r◕`,
+one glyph per resource at quintile resolution (○◔◑◕ empty->three-quarter; the block glyphs sat
+below the text baseline and looked janky), the top quintile becoming `!` with its letter
+uppercased (this face force-uppercases everything, so the case signal only shows on faces that
+respect case). Space-separated — the owner's slot renders ~8+ chars despite the API's 7-char
+contract. A monochrome CPU-chip icon rides the
 line: plain normally, one exclamation badge when any resource > 90%, three when a temperature is
 critical. RANGED_VALUE gauge (busiest resource) still offered. **The 7-char question, settled:**
 SHORT_TEXT text is capped at 7, but the slot also has a separate TITLE field, and the owner's
 face draws `title - text` on one visual line — that is where the earlier extra room came from, not
-an overflow. Tap-frame: five stacked 6 h charts — cpu / gpu / ram / vram percent, then all
-temperatures superimposed on one 0-100 degC chart (gpu red, cpu amber) — then the top-10 processes
+an overflow. Frame title is the machine name ("black pearl"). Tap-frame: five stacked 6 h charts — cpu / gpu / ram / vram percent, then all
+temperatures superimposed on one 0-100 degC chart: label white, each line half-transparent in its
+matching resource color (gpu green, cpu blue), and a faint red dotted warning line at 90 degC
+with tiny "!!!" at its right end — crossing it is what fires the phone alert — then the top-10 processes
 with a wider name column and c/g/r number columns tinted white->series-color as each value climbs
 to 99. Charts sit inside the round margins; extra black below clears the arc. Feeder posts every
 5 min: `{"cpu,ram,gpu,vram,tg,tc, procs:[[name,c,g,r] x10]}`; per-process GPU from Windows GPU
@@ -40,10 +45,14 @@ cpu >= 95 C posts a high-priority message to the `agents` topic, once per excurs
 cooldown. Scheduled feeders run through a windowless VBScript wrapper (`tools/rig/run_hidden.vbs`)
 so no console flashes. Known jitter: per-process CPU is a 1 s window, can read low vs the total.
 
-**agents** (2026-08-23): face shows the name of the most recently finished project — parsed from
-`done: {project}` — as many characters as the slot allows (`SOUNDIN…` for SoundingLine on a
-7-char slot; full name on LONG_TEXT slots). A pending "needs input" still shows `INPUT`. This
-topic also carries the rig temperature alerts.
+**agents** (2026-08-23, iteration 2): face shows the most recently finished project as the title
+and an auto-ticking time-since-finish as the text (`SOUN... 19M`); "needs input" still shows
+INPUT. Tap-frame: the latest finish per project from the last 24 h, deduped (three SoundingLine
+finishes collapse to the newest), newest first, as chips showing name + relative age; tapping a
+chip asks the paired phone to open Claude Code (claude.ai/code — the Claude app intercepts if
+installed; no public per-session deep links exist). This topic also carries the rig temperature
+alerts. Non-Claude agents: anything that can run a curl can post here (Codex CLI's notify hook
+qualifies); the ChatGPT consumer app exposes no hooks or history API and cannot be wired.
 
 **state / printer:** awaiting their design passes. Printer face stays invisible while
 idle (by design). State face currently shows the state code alone; tap opens the 2x4 tag grid

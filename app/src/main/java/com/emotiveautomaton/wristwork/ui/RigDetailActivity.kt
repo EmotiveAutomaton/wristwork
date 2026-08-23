@@ -25,6 +25,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -55,8 +56,7 @@ private val CPU_COLOR = Color(0xFF7FB5FF)
 private val GPU_COLOR = Color(0xFF7FE08A)
 private val RAM_COLOR = Color(0xFFFFB36B)
 private val VRAM_COLOR = Color(0xFFC9A0FF)
-private val TEMP_GPU_COLOR = Color(0xFFFF8080)
-private val TEMP_CPU_COLOR = Color(0xFFFFD066)
+private val WARN_COLOR = Color(0xFFFF6666)
 private val HEADER_COLOR = Color(0xFF9EB8D8)
 
 /**
@@ -90,7 +90,7 @@ class RigDetailActivity : ComponentActivity() {
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Spacer(Modifier.height(44.dp))
-                    Text("rig · 6h", fontSize = 13.sp, color = HEADER_COLOR)
+                    Text("black pearl · 6h", fontSize = 13.sp, color = HEADER_COLOR)
                     if (status.isNotEmpty()) {
                         Spacer(Modifier.height(20.dp)); Text(status, fontSize = 12.sp)
                     }
@@ -101,9 +101,11 @@ class RigDetailActivity : ComponentActivity() {
                     MultiGraph(
                         "temp °C",
                         listOf(
-                            Triple("gpu", TEMP_GPU_COLOR, readings.mapNotNull { r -> r.tg?.let { r.t to it } }),
-                            Triple("cpu", TEMP_CPU_COLOR, readings.mapNotNull { r -> r.tc?.let { r.t to it } }),
+                            Triple("gpu", GPU_COLOR.copy(alpha = 0.5f), readings.mapNotNull { r -> r.tg?.let { r.t to it } }),
+                            Triple("cpu", CPU_COLOR.copy(alpha = 0.5f), readings.mapNotNull { r -> r.tc?.let { r.t to it } }),
                         ).filter { it.third.isNotEmpty() },
+                        labelColor = Color.White,
+                        warnY = 90,
                     )
                     Spacer(Modifier.height(10.dp))
                     if (procs.isNotEmpty()) ProcHeader()
@@ -191,10 +193,13 @@ private fun MultiGraph(
     label: String,
     series: List<Triple<String, Color, List<Pair<Long, Int>>>>,
     showSeriesLabels: Boolean = true,
+    labelColor: Color? = null,
+    warnY: Int? = null,
 ) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth()) {
-            Text(label, fontSize = 11.sp, color = series.firstOrNull()?.second ?: HEADER_COLOR,
+            Text(label, fontSize = 11.sp,
+                color = labelColor ?: series.firstOrNull()?.second ?: HEADER_COLOR,
                 modifier = Modifier.weight(1f))
             series.forEach { (name, color, pts) ->
                 val v = pts.lastOrNull()?.second?.toString() ?: "–"
@@ -206,6 +211,21 @@ private fun MultiGraph(
             val grid = Color(0x33FFFFFF)
             for (frac in listOf(0f, 0.5f, 1f)) {
                 drawLine(grid, Offset(0f, size.height * frac), Offset(size.width, size.height * frac), 1f)
+            }
+            if (warnY != null) {
+                // Dotted red warning line: crossing it fires the phone alert.
+                val wy = size.height * (1f - warnY / 100f)
+                drawLine(
+                    WARN_COLOR, Offset(0f, wy), Offset(size.width, wy), 1.5f,
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(4f, 6f)),
+                )
+                drawContext.canvas.nativeCanvas.drawText(
+                    "!!!", size.width - 22.dp.toPx(), wy - 3f,
+                    android.graphics.Paint().apply {
+                        color = android.graphics.Color.argb(70, 255, 102, 102)
+                        textSize = 8.dp.toPx()
+                    },
+                )
             }
             val allT = series.flatMap { it.third.map { p -> p.first } }
             if (allT.size < 2) return@Canvas

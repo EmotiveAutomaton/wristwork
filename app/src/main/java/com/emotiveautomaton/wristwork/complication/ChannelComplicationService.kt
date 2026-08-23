@@ -103,6 +103,10 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
     /** Optional monochrome icon (face-tinted); may vary with the payload (thresholds). */
     open fun iconRes(message: String): Int? = null
 
+    /** When true, SHORT_TEXT text becomes the auto-ticking age and format() moves to the title;
+     *  LONG_TEXT wraps the age into "{longFormat} - {age}". Per-complication choice (owner). */
+    open fun ageAsText(): Boolean = false
+
     private fun monoImage(message: String): androidx.wear.watchface.complications.data.MonochromaticImage? =
         iconRes(message)?.let {
             androidx.wear.watchface.complications.data.MonochromaticImage.Builder(
@@ -130,19 +134,32 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
         val desc = PlainComplicationText.Builder("$topic: $shown").build()
         return when (type) {
             ComplicationType.SHORT_TEXT -> {
-                val b = ShortTextComplicationData.Builder(
-                    text = PlainComplicationText.Builder(shown).build(),
-                    contentDescription = desc,
-                ).setTapAction(tapIntent())
-                titleText(payload)?.let { b.setTitle(PlainComplicationText.Builder(it).build()) }
+                val textPart = if (ageAsText())
+                    androidx.wear.watchface.complications.data.TimeDifferenceComplicationText.Builder(
+                        androidx.wear.watchface.complications.data.TimeDifferenceStyle.SHORT_SINGLE_UNIT,
+                        androidx.wear.watchface.complications.data.CountUpTimeReference(
+                            Instant.ofEpochSecond(epochS)),
+                    ).build()
+                else PlainComplicationText.Builder(shown).build()
+                val b = ShortTextComplicationData.Builder(text = textPart, contentDescription = desc)
+                    .setTapAction(tapIntent())
+                if (ageAsText()) b.setTitle(PlainComplicationText.Builder(shown).build())
+                else titleText(payload)?.let { b.setTitle(PlainComplicationText.Builder(it).build()) }
                 monoImage(payload)?.let { b.setMonochromaticImage(it) }
                 b.build()
             }
             ComplicationType.LONG_TEXT -> {
                 val long = longFormat(payload) ?: return NoDataComplicationData()
                 val shownLong = if (age > Duration.ofHours(2)) "(${long.lowercase()})" else long
+                val longText = if (ageAsText())
+                    androidx.wear.watchface.complications.data.TimeDifferenceComplicationText.Builder(
+                        androidx.wear.watchface.complications.data.TimeDifferenceStyle.SHORT_SINGLE_UNIT,
+                        androidx.wear.watchface.complications.data.CountUpTimeReference(
+                            Instant.ofEpochSecond(epochS)),
+                    ).setText("$shownLong \u00b7 ^1").build()
+                else PlainComplicationText.Builder(shownLong).build()
                 val lb = LongTextComplicationData.Builder(
-                    text = PlainComplicationText.Builder(shownLong).build(),
+                    text = longText,
                     contentDescription = desc,
                 ).setTapAction(tapIntent())
                 monoImage(payload)?.let { lb.setMonochromaticImage(it) }
@@ -166,6 +183,8 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
 /** `agents` — Claude Code and friends. "done: wristwork" -> "done", "needs input: x" -> "INPUT". */
 class AgentsComplicationService : ChannelComplicationService() {
     override val topic get() = com.emotiveautomaton.wristwork.BuildConfig.TOPIC_AGENTS
+    override fun ageAsText(): Boolean = true
+    override fun tapActivity(): Class<*> = com.emotiveautomaton.wristwork.ui.AgentsDetailActivity::class.java
     private fun project(message: String): String? =
         Regex("^done:\\s*(.+)$", RegexOption.IGNORE_CASE)
             .find(message.trim())?.groupValues?.get(1)?.trim()
@@ -190,21 +209,27 @@ class RigComplicationService : ChannelComplicationService() {
         Json.parseToJsonElement(message).jsonObject[key]?.jsonPrimitive?.content?.toDoubleOrNull()
             ?.toInt()?.coerceIn(0, 99)
     }.getOrNull()
-    /** Quintile block glyph; the top quintile escalates to an exclamation point. */
+    /** Quintile circle-fill glyph (baseline-friendly, unlike the block glyphs); the top
+     *  quintile escalates to "!" and its letter goes uppercase. Letters are lowercase otherwise
+     *  (faces that force uppercase will flatten this — the data is still correct). */
     private fun glyph(v: Int): String = when {
         v >= 80 -> "!"
-        v >= 60 -> "\u2587"   // upper three-quarter block
-        v >= 40 -> "\u2585"
-        v >= 20 -> "\u2583"
-        else -> "\u2581"
+        v >= 60 -> "\u25d5"   // three-quarter circle
+        v >= 40 -> "\u25d1"   // half circle
+        v >= 20 -> "\u25d4"   // quarter circle
+        else -> "\u25cb"      // empty circle
+    }
+    private fun part(letter: String, v: Int): String {
+        val g = glyph(v)
+        return (if (g == "!") letter.uppercase() else letter.lowercase()) + g
     }
     private fun triple(message: String, sep: String): String? =
         listOfNotNull(
-            pct(message, "cpu")?.let { "c${glyph(it)}" },
-            pct(message, "gpu")?.let { "g${glyph(it)}" },
-            pct(message, "ram")?.let { "r${glyph(it)}" },
+            pct(message, "cpu")?.let { part("c", it) },
+            pct(message, "gpu")?.let { part("g", it) },
+            pct(message, "ram")?.let { part("r", it) },
         ).joinToString(sep).ifEmpty { null }
-    override fun format(message: String): String = triple(message, "") ?: message.take(6)
+    override fun format(message: String): String = triple(message, " ") ?: message.take(6)
     override fun longFormat(message: String): String? = triple(message, " ")
     override fun iconRes(message: String): Int {
         fun num(k: String) = runCatching {

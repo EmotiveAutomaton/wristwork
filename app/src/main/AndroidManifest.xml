@@ -66,6 +66,12 @@
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault" />
 
+        <!-- Agents tap-frame: recent finishes per project; chips hand off to the phone. -->
+        <activity
+            android:name=".ui.AgentsDetailActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault" />
+
         <!-- Phase 5: Component B — three instantiations of the generic channel provider. -->
         <service
             android:name=".complication.AgentsComplicationService"
