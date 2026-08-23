@@ -38,6 +38,11 @@ import okhttp3.Request
  * lowercased in parens — visibly aged, never mistakable for fresh. A formatter returning null
  * renders NO_DATA and the complication disappears (the printer between prints).
  */
+// File-scope, not a class member: a member delegate would mint one DataStore per service
+// instance over the same file, and the second access crashes the process (found on-device
+// 2026-08-23 — every channel refresh after the first was dying with IllegalStateException).
+private val Context.channelStore by preferencesDataStore(name = "channels")
+
 abstract class ChannelComplicationService : SuspendingComplicationDataSourceService() {
 
     /** Topic name, resolved from BuildConfig by the subclass. */
@@ -45,8 +50,6 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
 
     /** Message payload -> short face text (~7 chars), or null for NO_DATA. */
     abstract fun format(message: String): String?
-
-    private val Context.store by preferencesDataStore(name = "channels")
     private fun keyPayload() = stringPreferencesKey("$topic.payload")
     private fun keyTime() = longPreferencesKey("$topic.epoch_s")
 
@@ -62,7 +65,7 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
 
     /** Returns the newest known (payload, epoch seconds) for the topic, network permitting. */
     private suspend fun poll(): Pair<String?, Long?> {
-        val p = applicationContext.store.data.firstOrNull()
+        val p = applicationContext.channelStore.data.firstOrNull()
         var lastPayload: String? = p?.get(keyPayload())
         var lastTime: Long? = p?.get(keyTime())
         val since = lastTime?.toString() ?: "all"
@@ -79,7 +82,7 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
                 val obj = Json.parseToJsonElement(newest).jsonObject
                 lastPayload = obj["message"]?.jsonPrimitive?.content
                 lastTime = obj["time"]?.jsonPrimitive?.content?.toLongOrNull()
-                applicationContext.store.edit {
+                applicationContext.channelStore.edit {
                     lastPayload?.let { p -> it[keyPayload()] = p }
                     lastTime?.let { t -> it[keyTime()] = t }
                 }
