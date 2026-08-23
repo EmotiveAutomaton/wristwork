@@ -1,6 +1,6 @@
 # STATE — where each phase stands
 
-Updated 2026-08-22.
+Updated 2026-08-23.
 
 | Phase | Status | Notes |
 |---|---|---|
@@ -9,7 +9,7 @@ Updated 2026-08-22.
 | 2 watch link | done | Paired + connected over Wi-Fi adb (second attempt; pairing dialog must stay open). connect.sh verified against the live device. Watch reports API 37. |
 | 3 health complication | installed, awaiting slot | On the watch, service registered, watch→NAS ping 7–22 ms. Render pending owner placing it on the face. |
 | 4 state complication | built + verified on device | Grid renders (2×4, toggle, mic), tap→Room→DataStore→POST→labels.jsonl round trip verified <10 s via adb-driven tap. Offline replay path (WorkManager network constraint) UNVERIFIED — will be exercised naturally when first tagged away from Wi-Fi. State complication awaiting a face slot. |
-| 5 channel complications + feeders | watch side + rig feeder done | Generic provider + agents/rig/printer services installed (5 complication services registered on device). Rig stats feeder verified on the bus; needs its 5-min Task Scheduler entry (owner paste). Printer poller written; blocked on the PrusaLink API key (owner). |
+| 5 channel complications + feeders | done | All four complications slotted 2026-08-23. Fixed on-device crash (DataStore delegate scope) that blanked rig/printer. Stats task live (5 min, exit 0). Printer poller container live on the NAS, digest auth verified, posts `idle`. Printer complication invisible when idle BY DESIGN. |
 | 6 interpretation | gated | build nothing |
 
 Open design decisions are in [DECISIONS.md](DECISIONS.md).
