@@ -52,11 +52,11 @@ private data class Reading(
 private data class Proc(val name: String, val c: Int, val g: Int, val r: Int)
 
 /** Series palette — shared by graphs and the table's number tinting. */
-private val CPU_COLOR = Color(0xFF7FB5FF)
-private val GPU_COLOR = Color(0xFF7FE08A)
-private val RAM_COLOR = Color(0xFFFFB36B)
-private val VRAM_COLOR = Color(0xFFC9A0FF)
-private val WARN_COLOR = Color(0xFFFF6666)
+private val CPU_COLOR = Color(0xFF7FE08A)   // green (owner remap 2026-08-23)
+private val GPU_COLOR = Color(0xFF7FB5FF)   // blue
+private val VRAM_COLOR = Color(0xFFFFB36B)  // orange, drawn on the gpu graph
+private val RAM_COLOR = Color(0xFFC9A0FF)   // purple
+private val WARN_COLOR = Color(0xFFFF7A7A)
 private val HEADER_COLOR = Color(0xFF9EB8D8)
 
 /**
@@ -95,16 +95,23 @@ class RigDetailActivity : ComponentActivity() {
                         Spacer(Modifier.height(20.dp)); Text(status, fontSize = 12.sp)
                     }
                     Graph("cpu", readings.mapNotNull { r -> r.cpu?.let { r.t to it } }, CPU_COLOR)
-                    Graph("gpu", readings.mapNotNull { r -> r.gpu?.let { r.t to it } }, GPU_COLOR)
+                    MultiGraph(
+                        "gpu · vram",
+                        listOf(
+                            Triple("gpu", GPU_COLOR, readings.mapNotNull { r -> r.gpu?.let { r.t to it } }),
+                            Triple("vram", VRAM_COLOR, readings.mapNotNull { r -> r.vram?.let { r.t to it } }),
+                        ).filter { it.third.isNotEmpty() },
+                        showSeriesLabels = false,
+                        labelColor = GPU_COLOR,
+                    )
                     Graph("ram", readings.mapNotNull { r -> r.ram?.let { r.t to it } }, RAM_COLOR)
-                    Graph("vram", readings.mapNotNull { r -> r.vram?.let { r.t to it } }, VRAM_COLOR)
                     MultiGraph(
                         "temp °C",
                         listOf(
-                            Triple("gpu", GPU_COLOR.copy(alpha = 0.5f), readings.mapNotNull { r -> r.tg?.let { r.t to it } }),
-                            Triple("cpu", CPU_COLOR.copy(alpha = 0.5f), readings.mapNotNull { r -> r.tc?.let { r.t to it } }),
+                            Triple("gpu", GPU_COLOR, readings.mapNotNull { r -> r.tg?.let { r.t to it } }),
+                            Triple("cpu", CPU_COLOR, readings.mapNotNull { r -> r.tc?.let { r.t to it } }),
                         ).filter { it.third.isNotEmpty() },
-                        labelColor = Color.White,
+                        labelColor = WARN_COLOR,
                         warnY = 90,
                     )
                     Spacer(Modifier.height(10.dp))
@@ -201,9 +208,10 @@ private fun MultiGraph(
             Text(label, fontSize = 11.sp,
                 color = labelColor ?: series.firstOrNull()?.second ?: HEADER_COLOR,
                 modifier = Modifier.weight(1f))
-            series.forEach { (name, color, pts) ->
+            series.forEachIndexed { i, (name, color, pts) ->
                 val v = pts.lastOrNull()?.second?.toString() ?: "–"
-                Text(if (showSeriesLabels && series.size > 1) " $name $v" else v,
+                val sep = if (i > 0) "  " else ""
+                Text(sep + if (showSeriesLabels && series.size > 1) "$name $v" else v,
                     fontSize = 11.sp, color = color)
             }
         }

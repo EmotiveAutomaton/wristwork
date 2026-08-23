@@ -134,17 +134,18 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
         val desc = PlainComplicationText.Builder("$topic: $shown").build()
         return when (type) {
             ComplicationType.SHORT_TEXT -> {
+                // ageAsText: one combined text field "name·age" — the title field was what the
+                // face ellipsized ("SOUN..."); a single text renders as many chars as the slot fits.
                 val textPart = if (ageAsText())
                     androidx.wear.watchface.complications.data.TimeDifferenceComplicationText.Builder(
                         androidx.wear.watchface.complications.data.TimeDifferenceStyle.SHORT_SINGLE_UNIT,
                         androidx.wear.watchface.complications.data.CountUpTimeReference(
                             Instant.ofEpochSecond(epochS)),
-                    ).build()
+                    ).setText("$shown·^1").build()
                 else PlainComplicationText.Builder(shown).build()
                 val b = ShortTextComplicationData.Builder(text = textPart, contentDescription = desc)
                     .setTapAction(tapIntent())
-                if (ageAsText()) b.setTitle(PlainComplicationText.Builder(shown).build())
-                else titleText(payload)?.let { b.setTitle(PlainComplicationText.Builder(it).build()) }
+                if (!ageAsText()) titleText(payload)?.let { b.setTitle(PlainComplicationText.Builder(it).build()) }
                 monoImage(payload)?.let { b.setMonochromaticImage(it) }
                 b.build()
             }
@@ -185,6 +186,7 @@ class AgentsComplicationService : ChannelComplicationService() {
     override val topic get() = com.emotiveautomaton.wristwork.BuildConfig.TOPIC_AGENTS
     override fun ageAsText(): Boolean = true
     override fun tapActivity(): Class<*> = com.emotiveautomaton.wristwork.ui.AgentsDetailActivity::class.java
+    override fun iconRes(message: String): Int = com.emotiveautomaton.wristwork.R.drawable.ic_agents
     private fun project(message: String): String? =
         Regex("^done:\\s*(.+)$", RegexOption.IGNORE_CASE)
             .find(message.trim())?.groupValues?.get(1)?.trim()
@@ -192,7 +194,7 @@ class AgentsComplicationService : ChannelComplicationService() {
         val m = message.trim()
         return when {
             m.startsWith("needs input", ignoreCase = true) -> "INPUT"
-            else -> (project(m) ?: m).take(7)
+            else -> (project(m) ?: m).take(12)
         }
     }
     override fun longFormat(message: String): String? {
@@ -252,6 +254,8 @@ class RigComplicationService : ChannelComplicationService() {
 /** `printer` — progress/state; `idle` (and staleness) disappears the complication entirely. */
 class PrinterComplicationService : ChannelComplicationService() {
     override val topic get() = com.emotiveautomaton.wristwork.BuildConfig.TOPIC_PRINTER
+    override fun tapActivity(): Class<*> = com.emotiveautomaton.wristwork.ui.PrinterDetailActivity::class.java
+    override fun iconRes(message: String): Int = com.emotiveautomaton.wristwork.R.drawable.ic_printer
     override fun format(message: String): String? {
         val m = message.trim()
         return if (m.equals("idle", ignoreCase = true)) null else m.take(7)

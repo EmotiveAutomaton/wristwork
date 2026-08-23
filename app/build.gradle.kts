@@ -34,6 +34,8 @@ android {
         buildConfigField("String", "TOPIC_AGENTS", "\"${cfg("TOPIC_AGENTS")}\"")
         buildConfigField("String", "TOPIC_RIG", "\"${cfg("TOPIC_RIG")}\"")
         buildConfigField("String", "TOPIC_PRINTER", "\"${cfg("TOPIC_PRINTER")}\"")
+        buildConfigField("String", "PRINTER_HOST", "\"${cfg("PRINTER_HOST")}\"")
+        buildConfigField("String", "PRINTER_API_KEY", "\"${cfg("PRINTER_API_KEY")}\"")
     }
 
     buildTypes {

@@ -72,6 +72,12 @@
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault" />
 
+        <!-- Printer tap-frame: job thumbnail + rolling PrusaLink status (5 s refresh while open). -->
+        <activity
+            android:name=".ui.PrinterDetailActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.DeviceDefault" />
+
         <!-- Phase 5: Component B — three instantiations of the generic channel provider. -->
         <service
             android:name=".complication.AgentsComplicationService"

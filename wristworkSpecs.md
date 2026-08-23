@@ -23,7 +23,13 @@ hold (immutable raw data, no secrets in git, battery < 3%/day, no services/alarm
 - Every complication tap opens a single full-screen frame (back-swipe closes); one frame, no
   navigation tree.
 
-**rig** (design pass 2026-08-23, iteration 4): face renders circle-fill usage — `c◔ g◑ r◕`,
+**rig** (design pass 2026-08-23, iteration 5): graph colors remapped by owner — cpu green,
+gpu blue sharing one chart with vram orange (both current values on the right in their colors),
+ram purple; the table's number tints follow. Temp chart: label bright red like the warning line,
+temperature lines full-opacity in their resource colors (gpu blue). CPU temperature is
+unreadable on this board without admin sensor tooling (LibreHardwareMonitor would expose it;
+owner decision) — the chart auto-includes it if the feeder ever reports it. Face renders
+circle-fill usage — `c◔ g◑ r◕`,
 one glyph per resource at quintile resolution (○◔◑◕ empty->three-quarter; the block glyphs sat
 below the text baseline and looked janky), the top quintile becoming `!` with its letter
 uppercased (this face force-uppercases everything, so the case signal only shows on faces that
@@ -45,8 +51,11 @@ cpu >= 95 C posts a high-priority message to the `agents` topic, once per excurs
 cooldown. Scheduled feeders run through a windowless VBScript wrapper (`tools/rig/run_hidden.vbs`)
 so no console flashes. Known jitter: per-process CPU is a 1 s window, can read low vs the total.
 
-**agents** (2026-08-23, iteration 2): face shows the most recently finished project as the title
-and an auto-ticking time-since-finish as the text (`SOUN... 19M`); "needs input" still shows
+**agents** (2026-08-23, iteration 3): face shows one combined text — project name (up to 12
+chars, no ellipsized title field) then a middle dot and the auto-ticking age (`wristwork·19M`) —
+plus a two-person icon. The M/H/D case lives inside the platform's auto-ticking time format and
+cannot be styled; the alternative (caseless superscript ᵐʰᵈ) would cost the auto-tick, going
+stale up to 15 min between refreshes — not taken. "needs input" still shows INPUT; "needs input" still shows
 INPUT. Tap-frame: the latest finish per project from the last 24 h, deduped (three SoundingLine
 finishes collapse to the newest), newest first, as chips showing name + relative age; tapping a
 chip asks the paired phone to open Claude Code (claude.ai/code — the Claude app intercepts if
@@ -54,7 +63,14 @@ installed; no public per-session deep links exist). This topic also carries the 
 alerts. Non-Claude agents: anything that can run a curl can post here (Codex CLI's notify hook
 qualifies); the ChatGPT consumer app exposes no hooks or history API and cannot be wired.
 
-**state / printer:** awaiting their design passes. Printer face stays invisible while
+**printer** (2026-08-23, first pass): face shows progress percent + a printer icon; still
+disappears when idle. Tap-frame talks to PrusaLink directly over the LAN (digest auth on-watch):
+the job's own embedded thumbnail — the picture of what's printing — then print name, state,
+progress, remaining/elapsed, nozzle and bed temps with targets, z-height, speed, both fans,
+refreshing every 5 s while open. Printer host + API key ride the gitignored config into
+BuildConfig (private debug APK only; never in git).
+
+**state:** awaiting its design pass. Printer face stays invisible while
 idle (by design). State face currently shows the state code alone; tap opens the 2x4 tag grid
 (SEEK RAGE / FEAR LUST / CARE GRIEF / PLAY OTHER + "already noticed?" toggle + optional mic note).
 
