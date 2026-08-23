@@ -1,4 +1,41 @@
-# telltale — agent runbook
+# wristwork — living spec
+
+**This file is the core spec sheet and is kept current as the design evolves.** The original
+build runbook (below the divider) stands as written history; where this section disagrees with
+it, this section wins. Owner sets design at a high level; implementation detail lives in
+`docs/DECISIONS.md`; phase status in `docs/STATE.md`.
+
+## Current design (updated 2026-08-23)
+
+**Name:** wristwork (runbook said "telltale"; owner renamed 2026-08-22).
+
+**System as built:** Pixel Watch 5 complications <- ntfy bus on the Synology NAS (:8093) <- feeders
+(rig stats from the owner's workstation, PrusaLink poller container, Claude Code hooks). Raw labels
+append to `labels.jsonl` on the NAS, mirrored nightly to the workstation. All laws from the runbook
+hold (immutable raw data, no secrets in git, battery < 3%/day, no services/alarms/wake locks).
+
+**Faces (v2, in flight — one-by-one design passes):**
+- All numeric readings are integer percent of the machine's maximum, capped at 99.
+- Age counters are OFF face-wide for now; reconsidered per complication in its pass. Staleness
+  (>2 h) still marks itself: payload renders lowercased in parens. The face owns all styling
+  (font/size/color); we control characters, icons, and complication type. Rich visuals live in
+  tap-frames, which are fully ours.
+- Every complication tap opens a single full-screen frame (back-swipe closes); one frame, no
+  navigation tree.
+
+**rig** (design pass done 2026-08-23): face `c32g91` (cpu/gpu percent), or a RANGED_VALUE gauge
+slot showing the busiest resource on faces that support arcs. Tap-frame: three stacked 6 h percent
+graphs (cpu/gpu/ram, ~5 min resolution — read straight from the bus cache, nothing stored), then
+the top-5 processes by CPU share. Feeder posts every 5 min flat:
+`{"cpu":n,"ram":n,"gpu":n,"procs":[["name",pct],...]}`.
+
+**state / agents / printer:** awaiting their design passes. Printer face stays invisible while
+idle (by design). State face currently shows the state code alone; tap opens the 2x4 tag grid
+(SEEK RAGE / FEAR LUST / CARE GRIEF / PLAY OTHER + "already noticed?" toggle + optional mic note).
+
+---
+
+# telltale — original build runbook (historical)
 
 You are the build agent for **telltale**: Wear OS complications for a Pixel Watch 5 riding an ntfy bus, plus the server-side plumbing behind them. This file is the entire spec. The owner dropped it into an empty folder and expects you to drive.
 

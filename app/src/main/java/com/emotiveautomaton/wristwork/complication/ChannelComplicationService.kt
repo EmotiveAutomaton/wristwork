@@ -7,12 +7,10 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
-import androidx.wear.watchface.complications.data.CountUpTimeReference
 import androidx.wear.watchface.complications.data.NoDataComplicationData
 import androidx.wear.watchface.complications.data.PlainComplicationText
+import androidx.wear.watchface.complications.data.RangedValueComplicationData
 import androidx.wear.watchface.complications.data.ShortTextComplicationData
-import androidx.wear.watchface.complications.data.TimeDifferenceComplicationText
-import androidx.wear.watchface.complications.data.TimeDifferenceStyle
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
 import com.emotiveautomaton.wristwork.net.NtfyClient
@@ -54,13 +52,12 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
     private fun keyTime() = longPreferencesKey("$topic.epoch_s")
 
     override fun getPreviewData(type: ComplicationType): ComplicationData? =
-        if (type == ComplicationType.SHORT_TEXT) render("msg", Instant.now().epochSecond) else null
+        render("42", Instant.now().epochSecond, type)
 
     override suspend fun onComplicationRequest(request: ComplicationRequest): ComplicationData? {
-        if (request.complicationType != ComplicationType.SHORT_TEXT) return null
         val (payload, epochS) = withContext(Dispatchers.IO) { poll() }
         if (payload == null || epochS == null) return NoDataComplicationData()
-        return render(payload, epochS)
+        return render(payload, epochS, request.complicationType)
     }
 
     /** Returns the newest known (payload, epoch seconds) for the topic, network permitting. */
@@ -93,18 +90,43 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
         return lastPayload to lastTime
     }
 
-    private fun render(payload: String, epochS: Long): ComplicationData {
+    /** Subclasses may supply a tap-frame activity; null = no tap action. */
+    open fun tapActivity(): Class<*>? = null
+
+    /** Subclasses may supply a 0-99 gauge value for RANGED_VALUE slots; null = unsupported. */
+    open fun gaugeValue(message: String): Float? = null
+
+    private fun tapIntent(): android.app.PendingIntent? = tapActivity()?.let {
+        android.app.PendingIntent.getActivity(
+            this, 0,
+            android.content.Intent(this, it).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    // Age counters are stripped from the face for now (owner, 2026-08-23); staleness still marks
+    // itself as "(lowercase)". Age displays return per-complication as each gets its design pass.
+    private fun render(payload: String, epochS: Long, type: ComplicationType): ComplicationData? {
         val short = format(payload) ?: return NoDataComplicationData()
         val age = Duration.between(Instant.ofEpochSecond(epochS), Instant.now())
-        val stale = age > Duration.ofHours(2)
-        val shown = if (stale) "(${short.lowercase()})" else short
-        return ShortTextComplicationData.Builder(
-            text = TimeDifferenceComplicationText.Builder(
-                TimeDifferenceStyle.SHORT_SINGLE_UNIT,
-                CountUpTimeReference(Instant.ofEpochSecond(epochS)),
-            ).build(),
-            contentDescription = PlainComplicationText.Builder("$topic: $shown").build(),
-        ).setTitle(PlainComplicationText.Builder(shown).build()).build()
+        val shown = if (age > Duration.ofHours(2)) "(${short.lowercase()})" else short
+        val desc = PlainComplicationText.Builder("$topic: $shown").build()
+        return when (type) {
+            ComplicationType.SHORT_TEXT ->
+                ShortTextComplicationData.Builder(
+                    text = PlainComplicationText.Builder(shown).build(),
+                    contentDescription = desc,
+                ).setTapAction(tapIntent()).build()
+            ComplicationType.RANGED_VALUE -> {
+                val v = gaugeValue(payload) ?: return null
+                RangedValueComplicationData.Builder(
+                    value = v.coerceIn(0f, 99f), min = 0f, max = 99f,
+                    contentDescription = desc,
+                ).setText(PlainComplicationText.Builder(shown).build())
+                    .setTapAction(tapIntent()).build()
+            }
+            else -> null
+        }
     }
 }
 
@@ -124,15 +146,19 @@ class AgentsComplicationService : ChannelComplicationService() {
 /** `rig` — workstation stats JSON -> "c72 g41" style; falls back to raw prefix. */
 class RigComplicationService : ChannelComplicationService() {
     override val topic get() = com.emotiveautomaton.wristwork.BuildConfig.TOPIC_RIG
-    override fun format(message: String): String = runCatching {
-        val o = Json.parseToJsonElement(message).jsonObject
-        val cpu = o["cpu"]?.jsonPrimitive?.content?.toDoubleOrNull()
-        val gpu = o["gpu"]?.jsonPrimitive?.content?.toDoubleOrNull()
+    override fun tapActivity(): Class<*> = com.emotiveautomaton.wristwork.ui.RigDetailActivity::class.java
+    private fun pct(message: String, key: String): Int? = runCatching {
+        Json.parseToJsonElement(message).jsonObject[key]?.jsonPrimitive?.content?.toDoubleOrNull()
+            ?.toInt()?.coerceIn(0, 99)
+    }.getOrNull()
+    override fun format(message: String): String =
         listOfNotNull(
-            cpu?.let { "c${it.toInt()}" },
-            gpu?.let { "g${it.toInt()}" },
-        ).joinToString(" ").ifEmpty { message.take(7) }
-    }.getOrDefault(message.take(7))
+            pct(message, "cpu")?.let { "c$it" },
+            pct(message, "gpu")?.let { "g$it" },
+        ).joinToString("").ifEmpty { message.take(6) }
+    override fun gaugeValue(message: String): Float? =
+        listOfNotNull(pct(message, "cpu"), pct(message, "gpu"), pct(message, "ram"))
+            .maxOrNull()?.toFloat()
 }
 
 /** `printer` — progress/state; `idle` (and staleness) disappears the complication entirely. */

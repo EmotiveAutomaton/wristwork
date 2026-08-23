@@ -60,6 +60,12 @@
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault" />
 
+        <!-- Rig tap-frame: 6h graphs + top processes. Reachable only from the rig complication. -->
+        <activity
+            android:name=".ui.RigDetailActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault" />
+
         <!-- Phase 5: Component B — three instantiations of the generic channel provider. -->
         <service
             android:name=".complication.AgentsComplicationService"
@@ -90,7 +96,7 @@
             </intent-filter>
             <meta-data
                 android:name="android.support.wearable.complications.SUPPORTED_TYPES"
-                android:value="SHORT_TEXT" />
+                android:value="RANGED_VALUE,SHORT_TEXT" />
             <meta-data
                 android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
                 android:value="900" />

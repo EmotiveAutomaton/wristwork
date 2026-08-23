@@ -5,22 +5,17 @@ import android.content.ComponentName
 import android.content.Intent
 import androidx.wear.watchface.complications.data.ComplicationData
 import androidx.wear.watchface.complications.data.ComplicationType
-import androidx.wear.watchface.complications.data.CountUpTimeReference
 import androidx.wear.watchface.complications.data.PlainComplicationText
 import androidx.wear.watchface.complications.data.ShortTextComplicationData
-import androidx.wear.watchface.complications.data.TimeDifferenceComplicationText
-import androidx.wear.watchface.complications.data.TimeDifferenceStyle
 import androidx.wear.watchface.complications.datasource.ComplicationDataSourceUpdateRequester
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
 import com.emotiveautomaton.wristwork.data.CurrentState
 import com.emotiveautomaton.wristwork.ui.TagActivity
-import java.time.Instant
 
 /**
  * Component A face: `SEEK 43m` — current state code + elapsed, deliberately cryptic (privacy lives
- * in the renderer). Elapsed uses TimeDifferenceComplicationText so the face ticks by itself with
- * zero updates from us. Tap opens the grid.
+ * in the renderer). Face shows the state code alone for now. Tap opens the grid.
  */
 class StateComplicationService : SuspendingComplicationDataSourceService() {
 
@@ -40,19 +35,13 @@ class StateComplicationService : SuspendingComplicationDataSourceService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-    private fun build(state: String, sinceEpochMs: Long?, tap: PendingIntent): ComplicationData {
-        val title = PlainComplicationText.Builder(state).build()
-        val text = if (sinceEpochMs != null)
-            TimeDifferenceComplicationText.Builder(
-                TimeDifferenceStyle.SHORT_SINGLE_UNIT,
-                CountUpTimeReference(Instant.ofEpochMilli(sinceEpochMs)),
-            ).build()
-        else PlainComplicationText.Builder("tap").build()
-        return ShortTextComplicationData.Builder(
-            text = text,
+    // Elapsed-time text stripped from the face for now (owner, 2026-08-23); the tag timestamp
+    // still lives in DataStore and the archive, and returns when this face gets its design pass.
+    private fun build(state: String, sinceEpochMs: Long?, tap: PendingIntent): ComplicationData =
+        ShortTextComplicationData.Builder(
+            text = PlainComplicationText.Builder(state).build(),
             contentDescription = PlainComplicationText.Builder("current state $state").build(),
-        ).setTitle(title).setTapAction(tap).build()
-    }
+        ).setTapAction(tap).build()
 
     companion object {
         /** Push a face refresh right after a tag (spec: immediate update). */
