@@ -28,11 +28,19 @@ try {
         $tg = [math]::Round([double]$parts[3])
     }
 } catch {}
+# CPU temp via LibreHardwareMonitor's local web server (this board exposes no sensors to
+# non-admin WMI). LHM runs elevated in the tray with the server on :8085; absent -> tc omitted.
 $tc = $null
 try {
-    $tz = Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop |
-        Select-Object -First 1
-    if ($tz) { $tc = [math]::Round($tz.CurrentTemperature / 10 - 273.15) }
+    $lhm = Invoke-RestMethod -Uri "http://localhost:8085/data.json" -TimeoutSec 4
+    $stack = New-Object System.Collections.Stack; $stack.Push($lhm)
+    while ($stack.Count -gt 0 -and $null -eq $tc) {
+        $n = $stack.Pop()
+        if ($n.Text -match '^(CPU Package|Core Average|Core \(Tctl' -and $n.Value -match '([0-9.]+)\s*°C') {
+            $tc = [math]::Round([double]$Matches[1])
+        }
+        foreach ($ch in @($n.Children)) { if ($null -ne $ch) { $stack.Push($ch) } }
+    }
 } catch {}
 
 # --- per-process GPU by pid: Windows GPU Engine counters (Task Manager's numbers; nvidia's own
