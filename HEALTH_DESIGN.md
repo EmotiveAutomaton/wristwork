@@ -60,10 +60,11 @@ side; neither is the fallback for the other.
   same bus → NAS archiver → jsonl pattern as labels.
 - Collection starts in H1; **the detector it feeds is H2-gated.** Every week not collecting is
   training data lost forever — that asymmetry is why collection starts now.
-- **HRV caveat (verify before promising):** passive delivery is BPM samples, not beat intervals;
-  RMSSD-grade HRV is likely not derivable. Probe the sensor list once for a beat-interval /
-  heart-beat sensor; absent that, model features are HR + skin temp + BPM-variability
-  approximations, and no doc should promise "HRV" without the probe.
+- **HRV caveat — settled (probe run 2026-08-24):** no public beat-interval sensor exists on this
+  watch; raw PPG and the ECG hardware are sealed behind the same Pixel-Watch-private permission
+  as GSR. RMSSD-grade HRV is not derivable from what we can touch. Model features are HR +
+  skin temp + BPM-variability approximations; nightly RMSSD arrives later via Health Connect
+  (H1.5) as a baseline covariate only.
 
 ## The label object
 
@@ -144,6 +145,12 @@ picks for on-device legibility).
 3. Intensity slider: in or out.
 4. Cue delay: 30 min is the owner's starting guess; config knob either way.
 5. Canary threshold N (default 4 days).
+6. **Build-agent amendment (pending owner strike/approval): append-only revisions.** The schema
+   as written implies reopening an event edits it in place, which collides with the immutability
+   law. Proposed reconciliation: every (re)label is a NEW appended row carrying `event_id` (stable
+   per event) and `revises` (the prior row it supersedes); an event's current state is the latest
+   row for its id, and full label history is retained for free. UI shows one event; the archive
+   keeps every version. Costs nothing at entry time.
 
 ## Build order (H1, for the build agent)
 
