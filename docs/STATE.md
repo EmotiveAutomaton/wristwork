@@ -13,7 +13,7 @@ Updated 2026-08-23.
 | 6 interpretation | gated | build nothing |
 
 Open design decisions are in [DECISIONS.md](DECISIONS.md).
-Health-integration research and options for the planning agent: [../HEALTH_INTEGRATION.md](../HEALTH_INTEGRATION.md) (2026-08-23).
+Health/state design authority (owner design meeting + absorbed research): [../HEALTH_DESIGN.md](../HEALTH_DESIGN.md) (2026-08-24).
 
 ## Known test artifacts in the label archive (append-only; annotate, never delete)
 - `2026-08-22T12:03:00-07:00` state SEEK, `source:"provision-test"` — Phase 1 provisioning check.

@@ -89,11 +89,15 @@ progress, remaining/elapsed, nozzle and bed temps with targets, z-height, speed,
 refreshing every 5 s while open. Printer host + API key ride the gitignored config into
 BuildConfig (private debug APK only; never in git).
 
-**state:** awaiting its design pass. The owner's direction (2026-08-23): it will interact with
-the health layer — capturing Fitbit Body Response flags and tagging them. Research, data-source
-costs, and ranked options live in `HEALTH_INTEGRATION.md` (top level), written for the owner's
-planning agent; the battery law is owner-authorized to bend for physiological collection if
-unavoidable (number pending measurement). Printer face stays invisible while
+**state / health (H1 in build):** design authority is `HEALTH_DESIGN.md` (top level — owner
+design meeting 2026-08-24 + absorbed research appendix). Program: H1 collection -> H2 prosthesis
+(model with confidence on the wrist; gates: >=50 labels tier-2, >=100 structure audit) -> H3
+scaffold (not designed). Parallel capture: Fitbit Body Response flags via watch notification
+listener (+ silence canary) alongside owned passive HR + skin-temp streams. Label schema v2:
+dual timestamps, mixtures first-class, sources, retro-labeling as a requirement. Face shows a
+humane display name + time-since-entered (age ban lifted for this face). BATTERY LAW REPLACED by
+the owner: "comfortably survives a full wear-day" — the <3%/day figure is disowned; measure and
+report attribution during H1. Printer face stays invisible while
 idle (by design). State face currently shows the state code alone; tap opens the 2x4 tag grid
 (SEEK RAGE / FEAR LUST / CARE GRIEF / PLAY OTHER + "already noticed?" toggle + optional mic note).
 
