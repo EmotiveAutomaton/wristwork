@@ -35,13 +35,23 @@ class StateComplicationService : SuspendingComplicationDataSourceService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-    // Elapsed-time text stripped from the face for now (owner, 2026-08-23); the tag timestamp
-    // still lives in DataStore and the archive, and returns when this face gets its design pass.
-    private fun build(state: String, sinceEpochMs: Long?, tap: PendingIntent): ComplicationData =
-        ShortTextComplicationData.Builder(
-            text = PlainComplicationText.Builder(state).build(),
-            contentDescription = PlainComplicationText.Builder("current state $state").build(),
+    // Design pass 2026-08-24 (HEALTH_DESIGN.md): humane display name + auto-ticking time since
+    // entered ("to remind me to keep up with it"); the face-wide age ban is lifted for this
+    // complication. When H2 ships, the same slot gains the model guess + confidence bar.
+    private fun build(state: String, sinceEpochMs: Long?, tap: PendingIntent): ComplicationData {
+        val name = com.emotiveautomaton.wristwork.data.StateNames.humane(state)
+        val text = if (sinceEpochMs != null)
+            androidx.wear.watchface.complications.data.TimeDifferenceComplicationText.Builder(
+                androidx.wear.watchface.complications.data.TimeDifferenceStyle.SHORT_SINGLE_UNIT,
+                androidx.wear.watchface.complications.data.CountUpTimeReference(
+                    java.time.Instant.ofEpochMilli(sinceEpochMs)),
+            ).setText("$name·^1").build()
+        else PlainComplicationText.Builder(name).build()
+        return ShortTextComplicationData.Builder(
+            text = text,
+            contentDescription = PlainComplicationText.Builder("current state $name").build(),
         ).setTapAction(tap).build()
+    }
 
     companion object {
         /** Push a face refresh right after a tag (spec: immediate update). */

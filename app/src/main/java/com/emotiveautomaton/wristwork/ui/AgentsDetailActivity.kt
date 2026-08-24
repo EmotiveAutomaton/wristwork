@@ -31,6 +31,7 @@ import com.emotiveautomaton.wristwork.BuildConfig
 import com.emotiveautomaton.wristwork.net.NtfyClient
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -51,6 +52,18 @@ class AgentsDetailActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Opening this frame IS the "addressed" signal: post an ack so the PC-side hook resumes
+        // buzzing for the next finish (repeats since the last ack post silently).
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            runCatching {
+                NtfyClient.http.newCall(
+                    okhttp3.Request.Builder()
+                        .url("${'$'}{NtfyClient.baseUrl}/${'$'}{BuildConfig.TOPIC_ACKS}")
+                        .post(okhttp3.RequestBody.create(null, "ack"))
+                        .build()
+                ).execute().close()
+            }
+        }
         setContent {
             WristTheme {
                 var finishes by remember { mutableStateOf<List<Finish>>(emptyList()) }

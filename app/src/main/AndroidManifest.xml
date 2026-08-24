@@ -4,6 +4,7 @@
     <uses-feature android:name="android.hardware.type.watch" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:usesCleartextTraffic="true"
@@ -59,6 +60,18 @@
             android:name=".ui.TagActivity"
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault" />
+
+        <!-- Family-1 capture: logs Fitbit notifications into the flags stream; body responses
+             schedule the delayed tag cue. Bound by the OS; enabled via notification access. -->
+        <service
+            android:name=".flags.FlagListenerService"
+            android:exported="true"
+            android:label="wristwork flag listener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
 
         <!-- Rig tap-frame: 6h graphs + top processes. Reachable only from the rig complication. -->
         <activity

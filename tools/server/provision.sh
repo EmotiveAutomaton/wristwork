@@ -39,6 +39,13 @@ $DOCKER run -d --name wristwork-labels --restart=always --network wristwork-net 
   --entrypoint sh binwiederhier/ntfy \
   -c 'while true; do ntfy subscribe http://wristwork-ntfy/tags >> /labels/labels.jsonl 2>>/labels/subscriber.err; sleep 5; done'
 
+# Flag + health archivers: every message on `flags` / `health` becomes a JSON line, same
+# pattern as labels (append-only law covers all streams).
+for STREAM in flags health; do
+  $DOCKER rm -f "wristwork-$STREAM" >/dev/null 2>&1 || true
+  $DOCKER run -d --name "wristwork-$STREAM" --restart=always --network wristwork-net     -v "$DATA_ROOT/labels:/labels"     --entrypoint sh binwiederhier/ntfy     -c "while true; do ntfy subscribe http://wristwork-ntfy/$STREAM >> /labels/$STREAM.jsonl 2>>/labels/$STREAM.err; sleep 5; done"
+done
+
 # Make the data readable by the calling user (chown via helper container: root work stays in docker).
 $DOCKER run --rm -v "$DATA_ROOT:/d" --entrypoint sh binwiederhier/ntfy -c "chown -R $OWNER_UIDGID /d"
 

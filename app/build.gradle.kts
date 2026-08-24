@@ -36,6 +36,10 @@ android {
         buildConfigField("String", "TOPIC_PRINTER", "\"${cfg("TOPIC_PRINTER")}\"")
         buildConfigField("String", "PRINTER_HOST", "\"${cfg("PRINTER_HOST")}\"")
         buildConfigField("String", "PRINTER_API_KEY", "\"${cfg("PRINTER_API_KEY")}\"")
+        buildConfigField("String", "TOPIC_ACKS", "\"${cfg("TOPIC_ACKS")}\"")
+        buildConfigField("String", "TOPIC_FLAGS", "\"${cfg("TOPIC_FLAGS")}\"")
+        buildConfigField("String", "TOPIC_HEALTH", "\"${cfg("TOPIC_HEALTH")}\"")
+        buildConfigField("int", "CUE_DELAY_MIN", cfg("CUE_DELAY_MIN").ifEmpty { "30" })
     }
 
     buildTypes {
@@ -76,4 +80,5 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.work.runtime.ktx)
     implementation(libs.wear.remote.interactions)
+    implementation(libs.health.services.client)
 }
