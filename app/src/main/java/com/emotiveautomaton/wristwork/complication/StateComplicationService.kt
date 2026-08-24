@@ -24,6 +24,8 @@ class StateComplicationService : SuspendingComplicationDataSourceService() {
 
     override suspend fun onComplicationRequest(request: ComplicationRequest): ComplicationData? {
         if (request.complicationType != ComplicationType.SHORT_TEXT) return null
+        // Idempotent; self-heals passive-collection registration after reboots (H1 family 2).
+        com.emotiveautomaton.wristwork.health.PassiveDataService.ensureRegistered(this)
         val snap = CurrentState.read(this)
         return build(snap.state ?: "—", snap.sinceEpochMs, tapIntent())
     }

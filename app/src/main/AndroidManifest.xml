@@ -5,6 +5,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission android:name="android.permission.health.READ_SKIN_TEMPERATURE" />
 
     <application
         android:usesCleartextTraffic="true"
@@ -60,6 +62,12 @@
             android:name=".ui.TagActivity"
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault" />
+
+        <!-- Family-2 owned collection: platform-bound passive listener; batches -> health topic. -->
+        <service
+            android:name=".health.PassiveDataService"
+            android:exported="true"
+            android:permission="com.google.android.wearable.healthservices.permission.PASSIVE_DATA_BINDING" />
 
         <!-- Family-1 capture: logs Fitbit notifications into the flags stream; body responses
              schedule the delayed tag cue. Bound by the OS; enabled via notification access. -->

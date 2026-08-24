@@ -81,4 +81,5 @@ dependencies {
     implementation(libs.work.runtime.ktx)
     implementation(libs.wear.remote.interactions)
     implementation(libs.health.services.client)
+    implementation(libs.guava)
 }

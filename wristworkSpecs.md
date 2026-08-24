@@ -89,7 +89,13 @@ progress, remaining/elapsed, nozzle and bed temps with targets, z-height, speed,
 refreshing every 5 s while open. Printer host + API key ride the gitignored config into
 BuildConfig (private debug APK only; never in git).
 
-**state / health (H1 in build):** design authority is `HEALTH_DESIGN.md` (top level — owner
+**state / health (H1 BUILT 2026-08-24, verifying in wear):** grid v2 live on device (humane
+names over canonical smalls, 3/3/2, fast path intact, mix mode with dominant+secondaries and
+intensity/confidence sliders, timeline chips with relabel + 15-min-arrow retro events, cue-linked
+labeling); schema v2 wrist->archive verified; face shows humane name + ticking age; flag listener
+enabled (awaiting first real Fitbit notification); passive HR + skin temp registered (batches
+pending wear time); flags/health archivers + mirrors + canary live; ack-aware agent notifications
+(repeat finishes silent until the agents frame is opened). Design authority: design authority is `HEALTH_DESIGN.md` (top level — owner
 design meeting 2026-08-24 + absorbed research appendix). Program: H1 collection -> H2 prosthesis
 (model with confidence on the wrist; gates: >=50 labels tier-2, >=100 structure audit) -> H3
 scaffold (not designed). Parallel capture: Fitbit Body Response flags via watch notification

@@ -16,5 +16,6 @@ Open design decisions are in [DECISIONS.md](DECISIONS.md).
 Health/state design authority (owner design meeting + absorbed research): [../HEALTH_DESIGN.md](../HEALTH_DESIGN.md) (2026-08-24).
 
 ## Known test artifacts in the label archive (append-only; annotate, never delete)
+- `2026-08-24T05:10:58-07:00` SEEK (schema v2), `source:"manual"` — grid v2 adb fast-path test (not a real label).
 - `2026-08-22T12:03:00-07:00` state SEEK, `source:"provision-test"` — Phase 1 provisioning check.
 - `2026-08-22T12:54:23.856046-07:00` state OTHER, `source:"manual"` — Phase 4 automated adb tap test (not a real label).
