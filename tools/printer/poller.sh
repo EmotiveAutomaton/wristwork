@@ -103,11 +103,13 @@ while true; do
                 [ -n "${progress:-}" ] && last_pct=$progress
                 bucket=$(( ${progress:-0} / 5 ))
                 if [ "$state" != "$last_state" ] || [ "$bucket" -ne "$last_bucket" ]; then
-                    # All three are silent: the face reads them on its next refresh.
+                    # Progress is silent; the face reads it on its next refresh. A print that
+                    # has STOPPED NEEDING YOU TO NOT KNOW is allowed to interrupt (owner
+                    # 2026-08-28): paused for filament, or wanting attention, buzzes.
                     case "$state" in
                         PRINTING) post "${progress:-0}%" min;;
-                        PAUSED)   post "paused" min;;
-                        *)        post "ATTN" min;;
+                        PAUSED)   post "paused" high;;
+                        *)        post "ATTN" high;;
                     esac
                     last_state="$state"; last_bucket="$bucket"
                 fi
@@ -129,11 +131,14 @@ while true; do
                     else
                         msg="stopped $DOT $name $DOT $dur $DOT ${last_pct}%"
                     fi
-                    # The one interruption the printer is allowed: the print ended.
+                    # The end of a print interrupts either way; one that ended EARLY is worth
+                    # more attention than one that finished.
+                    _prio=default
+                    case "$msg" in stopped*) _prio=high;; esac
                     if [ -s "$THUMB" ]; then
-                        post_file "$msg" "$THUMB" default || post "$msg" default
+                        post_file "$msg" "$THUMB" "$_prio" || post "$msg" "$_prio"
                     else
-                        post "$msg" default
+                        post "$msg" "$_prio"
                     fi
                     rm -f "$THUMB"
                     printing=0; last_state="$state"; last_bucket=-1; last_pct=0; job_secs=0; job_name=""

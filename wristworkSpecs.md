@@ -211,6 +211,21 @@ by dragging — for placing a label on a particular moment. The face's state lin
 prompt is waiting, and returns to the age of the most recent event the moment anything is
 submitted.
 
+**the sealed sensors — what is actually reachable (measured 2026-08-28):** the private-sensor
+permission is not a runtime permission at all; the device answers "not a changeable permission
+type", meaning only an app signed by Google or installed into the system image can ever hold it.
+No amount of asking changes that, and there is no application process. What that seals off:
+continuous raw pulse, skin conductance, and continuous ECG. What it does NOT seal off, and what
+changes the HRV picture completely: **the ECG app on this watch records thirty-second readings,
+and those readings come back through the health API as RAW WAVEFORM SAMPLES AT 250 Hz** — true
+beat-to-beat intervals, on demand, no root, no chest strap, explicitly offered for research use.
+That is the calibrator the project needed. Skin conductance has no API at all and is not on the
+roadmap, so it remains root-only. Rooting is documented by the community for earlier watches and
+needs fastboot over the charging pins (a modified cable), an unlock toggle this device currently
+reports as off, a full wipe, and the acceptance that a rooted watch may fail integrity checks and
+break the Fitbit stack we depend on — which would cost the sleep, body-response and ECG paths to
+gain the two sealed ones. Decision deferred until the ECG-calibrated features prove insufficient.
+
 **collection widened 2026-08-28** to everything the device actually offers in the background,
 asked of the device rather than the documentation: heart rate, intraday steps, calories, distance,
 floors and elevation gain, the platform's own awake/asleep/exercise state, and a short sweep of

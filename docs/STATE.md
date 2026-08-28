@@ -24,6 +24,25 @@ Printer record: carries the print's own thumbnail, uploaded by the poller as an 
 untouched). Rig frame: a deliberately unwired `mic` button — speak, see the transcript, it is
 dropped. APK builds clean; the watch was asleep at install time, so none of it is on the wrist yet.
 
+## 2026-08-28 (later): the sealed sensors, answered with measurements
+
+Asked on the device rather than argued about. The private-sensor permission cannot be granted —
+the system calls it "not a changeable permission type", so it is signature-level and only a
+Google-signed or system-installed app can hold it. Raw pulse, skin conductance and continuous ECG
+are behind it. Skin conductance has no API at all and Fitbit have said it is not on the roadmap.
+
+But the ECG APP IS INSTALLED on this watch, and its thirty-second readings come back through the
+health API as raw waveform samples at 250 Hz. That is genuine beat-to-beat data — the calibrator
+this project wanted — at no cost, no risk and no root. It is on-demand rather than continuous,
+which makes it a calibrator rather than a stream.
+
+Bootloader state as reported by the watch: verified boot green, flash locked, unlock-allowed
+empty. Rooting would need fastboot over the charging pins with a modified cable, a wipe, and would
+risk the Fitbit stack that supplies sleep, body-response and the ECG path itself. Deferred.
+
+Printer: a print that pauses for filament or wants attention now buzzes, and one that ends early
+buzzes harder than one that finishes (owner 2026-08-28). Routine progress stays silent.
+
 ## 2026-08-28: collection widened, grid v5, detector in shadow
 
 Collection now covers every background channel this device offers (verified by asking the device:
