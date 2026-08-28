@@ -10,10 +10,13 @@ interface TagDao {
     @Query("SELECT * FROM tag_events WHERE uploaded = 0 ORDER BY id") suspend fun pending(): List<TagEvent>
     @Query("UPDATE tag_events SET uploaded = 1 WHERE id = :id") suspend fun markUploaded(id: Long)
 
-    /** Newest revision per event, newest events first — the timeline's label stream. */
+    /** Newest revision per event, newest events first — the timeline's label stream.
+     *  Events whose newest revision is a tombstone are gone from the timeline but not from the
+     *  archive: removal is an append like everything else. */
     @Query(
         """SELECT * FROM tag_events WHERE id IN
            (SELECT MAX(id) FROM tag_events GROUP BY eventId)
+           AND primaryState != 'DELETED'
            ORDER BY tsEvent DESC LIMIT :n"""
     )
     suspend fun latestEvents(n: Int): List<TagEvent>

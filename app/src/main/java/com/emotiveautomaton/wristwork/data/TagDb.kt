@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [TagEvent::class, FlagEvent::class, RawBatch::class], version = 2, exportSchema = false)
+@Database(entities = [TagEvent::class, FlagEvent::class, RawBatch::class], version = 3, exportSchema = false)
 abstract class TagDb : RoomDatabase() {
     abstract fun tags(): TagDao
     abstract fun flags(): FlagDao
@@ -50,10 +50,20 @@ abstract class TagDb : RoomDatabase() {
             }
         }
 
+        /** v3 adds prompt provenance. Additive only: existing rows keep their source value and
+         *  get NULL prompts, because rewriting history to fit a new vocabulary is exactly what
+         *  the append-only law exists to prevent. */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tag_events ADD COLUMN promptId TEXT")
+                db.execSQL("ALTER TABLE tag_events ADD COLUMN promptTs TEXT")
+            }
+        }
+
         @Volatile private var instance: TagDb? = null
         fun get(context: Context): TagDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, TagDb::class.java, "tags.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { instance = it }
         }
     }

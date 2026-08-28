@@ -14,12 +14,22 @@ object CurrentState {
     private val KEY_STATE = stringPreferencesKey("state")
     private val KEY_SINCE = longPreferencesKey("since_epoch_ms")
     private val KEY_NOTICED = booleanPreferencesKey("noticed")
+    private val KEY_PENDING = booleanPreferencesKey("prompt_pending")
 
-    data class Snapshot(val state: String?, val sinceEpochMs: Long?, val noticed: Boolean)
+    data class Snapshot(
+        val state: String?, val sinceEpochMs: Long?, val noticed: Boolean,
+        /** A prompt is waiting to be answered: the face says NEW until a label is submitted. */
+        val promptPending: Boolean = false,
+    )
 
     suspend fun read(context: Context): Snapshot {
         val p = context.store.data.first()
-        return Snapshot(p[KEY_STATE], p[KEY_SINCE], p[KEY_NOTICED] ?: false)
+        return Snapshot(p[KEY_STATE], p[KEY_SINCE], p[KEY_NOTICED] ?: false, p[KEY_PENDING] ?: false)
+    }
+
+    /** Set when a prompt fires, cleared the moment anything is submitted. */
+    suspend fun setPromptPending(context: Context, pending: Boolean) {
+        context.store.edit { it[KEY_PENDING] = pending }
     }
 
     suspend fun write(context: Context, state: String, sinceEpochMs: Long, noticed: Boolean) {
