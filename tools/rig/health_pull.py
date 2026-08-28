@@ -42,15 +42,23 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 LOOPBACK_PORT = 8731
 REDIRECT = "http://127.0.0.1:%d" % LOOPBACK_PORT
 
-# (data type on the wire, the kind it is filed under, the scope it needs)
+# Data types are per-metric; SCOPES ARE NOT. Google groups them, and asking for a scope named
+# after a data type is rejected outright — "heart_rate_variability" and "oxygen_saturation" are
+# not scopes, they are metrics that live inside the health-metrics group (measured against the
+# consent screen 2026-08-28, which named exactly which of our guesses were invalid).
 WANTED = [
-    ("electrocardiogram", "ecg", "ecg"),
-    ("heart-rate-variability", "hrv", "heart_rate_variability"),
-    ("sleep", "sleep", "sleep"),
-    ("oxygen-saturation", "spo2", "oxygen_saturation"),
-    ("respiratory-rate", "breathing", "respiratory_rate"),
+    ("electrocardiogram", "ecg"),
+    ("heart-rate-variability", "hrv"),
+    ("sleep", "sleep"),
+    ("oxygen-saturation", "spo2"),
+    ("respiratory-rate", "breathing"),
 ]
-SCOPES = ["https://www.googleapis.com/auth/googlehealth.%s.readonly" % s for _, _, s in WANTED]
+SCOPES = ["https://www.googleapis.com/auth/googlehealth.%s.readonly" % s for s in (
+    "ecg",                                # the waveform: the whole reason for this pipeline
+    "sleep",                              # stages and duration
+    "health_metrics_and_measurements",    # HRV, oxygen saturation, breathing rate, temperature
+    "activity_and_fitness",               # heart rate and movement, as a cross-check on the wrist
+)]
 
 
 def config():
@@ -218,7 +226,7 @@ def main():
     seen = state.setdefault("seen", {})
     filed = 0
 
-    for wire, kind, _scope in WANTED:
+    for wire, kind in WANTED:
         try:
             # The exact paging and range parameters are not published; ask for a recent slice and
             # filter locally, and keep the raw response shape so the first real run tells us what
