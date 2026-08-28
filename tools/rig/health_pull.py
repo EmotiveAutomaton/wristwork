@@ -14,8 +14,9 @@ Fetched, in order of how much they matter here:
 
 AUTHORISATION is a one-time thing the owner does, because it needs their Google account:
     python tools/rig/health_pull.py --auth
-prints a URL, they approve, they paste the code back. The refresh token is written to the
-gitignored config and never leaves this machine.
+prints a URL and waits. They open it, approve, and the browser hands the code straight back to a
+loopback listener — nothing is typed by hand. The refresh token is written to the gitignored
+config and never leaves this machine.
 
 Run with no arguments to fetch. Idempotent: a state file records what has already been filed, so
 running it hourly cannot duplicate anything.
@@ -35,7 +36,11 @@ STATE = os.path.join(ROOT, "data", "health-pull-state.json")
 API = "https://health.googleapis.com/v4/users/me/dataTypes/%s/dataPoints"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-REDIRECT = "urn:ietf:wg:oauth:2.0:oob"          # installed-app flow: paste the code back
+# Loopback, not the old paste-the-code flow: Google retired out-of-band redirects for desktop
+# clients in 2022, and a desktop client is allowed to redirect to 127.0.0.1 on any port. The
+# script listens, the browser hands the code straight back, and nothing is typed by hand.
+LOOPBACK_PORT = 8731
+REDIRECT = "http://127.0.0.1:%d" % LOOPBACK_PORT
 
 # (data type on the wire, the kind it is filed under, the scope it needs)
 WANTED = [
@@ -97,12 +102,40 @@ def authorise(cfg):
         "client_id": cid, "redirect_uri": REDIRECT, "response_type": "code",
         "scope": " ".join(SCOPES), "access_type": "offline", "prompt": "consent",
     }
-    print("\n1. Open this in a browser and approve:\n")
+    print("\nOpen this in a browser and approve:\n")
     print(AUTH_URL + "?" + urllib.parse.urlencode(params))
-    print("\n2. Paste the code it gives you here and press enter:")
-    code = sys.stdin.readline().strip()
+    print("\nWaiting for the browser to come back (five minutes)...", flush=True)
+
+    import http.server
+    import socketserver
+
+    captured = {}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            captured.update({k: v[0] for k, v in q.items()})
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            done = "code" in captured
+            self.wfile.write(
+                ("<html><body style='font-family:sans-serif;padding:3em'>"
+                 + ("<h2>Authorised.</h2><p>You can close this tab.</p>" if done
+                    else "<h2>Something came back without a code.</h2><pre>%s</pre>" % captured)
+                 + "</body></html>").encode())
+
+        def log_message(self, *args):
+            pass
+
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer(("127.0.0.1", LOOPBACK_PORT), Handler) as srv:
+        srv.timeout = 300
+        srv.handle_request()
+
+    code = captured.get("code")
     if not code:
-        print("no code given")
+        print("no code came back: %s" % (captured or "nothing at all"))
         return 1
     tok = post_form(TOKEN_URL, {
         "code": code, "client_id": cid, "client_secret": secret,
