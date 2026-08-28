@@ -58,7 +58,11 @@ class AgentsDetailActivity : ComponentActivity() {
             runCatching {
                 NtfyClient.http.newCall(
                     okhttp3.Request.Builder()
-                        .url("${'$'}{NtfyClient.baseUrl}/${'$'}{BuildConfig.TOPIC_ACKS}")
+                        // Was written with escaped dollars, which made this a LITERAL
+                        // "${'$'}{NtfyClient.baseUrl}/..." string: OkHttp threw, runCatching ate it,
+                        // and no ack was ever posted (found 2026-08-26 when the round trip was
+                        // finally tested rather than inferred).
+                        .url(NtfyClient.baseUrl + "/" + BuildConfig.TOPIC_ACKS)
                         .post(okhttp3.RequestBody.create(null, "ack"))
                         .build()
                 ).execute().close()

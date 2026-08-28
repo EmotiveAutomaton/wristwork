@@ -56,6 +56,11 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
         render("42", Instant.now().epochSecond, type)
 
     override suspend fun onComplicationRequest(request: ComplicationRequest): ComplicationData? {
+        // Piggybacked on the 15-minute channel refresh because the state provider updates only on
+        // demand: whichever fires first files the device capability inventory, once per version.
+        com.emotiveautomaton.wristwork.health.SensorInventory.postOnce(applicationContext)
+        // Same free ride for the prompt poller's schedule (KEEP, so this never restarts it).
+        com.emotiveautomaton.wristwork.work.PromptWorker.ensureScheduled(applicationContext)
         val (payload, epochS) = withContext(Dispatchers.IO) { poll() }
         if (payload == null || epochS == null) return NoDataComplicationData()
         return render(payload, epochS, request.complicationType)
@@ -108,18 +113,29 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
      *  follows what the age looks like for most of the ~15-min refresh window. */
     protected fun nameBudget(epochS: Long): Int {
         val mins = (java.time.Instant.now().epochSecond - epochS) / 60
+        // MEASURED, not guessed (2026-08-26): this slot renders "GHO·5" and then ellipsises the
+        // "H" away. It is a pixel width — roughly five and a half capitals with the icon present —
+        // so the old character budgets were always over, and the parentheses had been hiding it by
+        // being narrow. Two letters is what fits without ever showing "...", and two letters still
+        // separates every project on this machine (GH, SO, WR, FE, HM, WE, LO, BU, SI).
         return when {
-            mins < 60 -> 3            // minutes tick fast; "17M" is the common case
-            mins < 10 * 60 -> 4       // "2H" stays two chars for hours at a time
-            mins < 24 * 60 -> 3       // "14H"
-            mins < 10 * 24 * 60 -> 4  // "3D"
-            else -> 3
+            mins < 60 -> 2            // "GH·17M"
+            mins < 10 * 60 -> 2       // "GH·5H"
+            mins < 24 * 60 -> 2       // "GH·14H"
+            mins < 10 * 24 * 60 -> 2  // "GH·3D"
+            else -> 2
         }
     }
 
     /** When true, SHORT_TEXT text becomes the auto-ticking age and format() moves to the title;
-     *  LONG_TEXT wraps the age into "{longFormat} - {age}". Per-complication choice (owner). */
-    open fun ageAsText(): Boolean = false
+     *  LONG_TEXT wraps the age into "{longFormat} - {age}". Per-complication choice (owner),
+     *  and per-MESSAGE: the printer wants a live percent while printing and a ticking
+     *  time-since-finished when it is not. */
+    open fun ageAsText(message: String): Boolean = false
+
+    /** With ageAsText, true drops the name entirely and shows the bare ticking age. Used where
+     *  the icon already says what the age is about (printer icon + "3H" = finished 3 h ago). */
+    open fun ageOnly(message: String): Boolean = false
 
     private fun monoImage(message: String): androidx.wear.watchface.complications.data.MonochromaticImage? =
         iconRes(message)?.let {
@@ -144,7 +160,11 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
     private fun render(payload: String, epochS: Long, type: ComplicationType): ComplicationData? {
         val short = format(payload) ?: return NoDataComplicationData()
         val age = Duration.between(Instant.ofEpochSecond(epochS), Instant.now())
-        val shown = if (age > Duration.ofHours(2)) "(${short.lowercase()})" else short
+        // Parentheses mark staleness only where nothing else does. A face that already draws a
+        // ticking age states its own staleness far better, and the brackets were eating two of
+        // the seven characters the name gets (owner 2026-08-25: "I want the extra letter").
+        val marksAge = ageAsText(payload)
+        val shown = if (age > Duration.ofHours(2) && !marksAge) "(${short.lowercase()})" else short
         val desc = PlainComplicationText.Builder("$topic: $shown").build()
         return when (type) {
             ComplicationType.SHORT_TEXT -> {
@@ -152,23 +172,25 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
                 // face ellipsized ("SOUN..."); a single text renders as many chars as the slot fits.
                 // ageAsText: title carries "name·" (clipped by us, never face-ellipsized) and
                 // the text field carries the bare ticking age — two fields = two budgets.
-                val textPart = if (ageAsText())
-                    androidx.wear.watchface.complications.data.TimeDifferenceComplicationText.Builder(
+                val textPart = if (ageAsText(payload)) {
+                    val tb = androidx.wear.watchface.complications.data.TimeDifferenceComplicationText.Builder(
                         androidx.wear.watchface.complications.data.TimeDifferenceStyle.SHORT_SINGLE_UNIT,
                         androidx.wear.watchface.complications.data.CountUpTimeReference(
                             Instant.ofEpochSecond(epochS)),
-                    ).setText("${shown.take(nameBudget(epochS))}·^1").build()
-                else PlainComplicationText.Builder(shown).build()
+                    )
+                    if (!ageOnly(payload)) tb.setText("${shown.take(nameBudget(epochS))}·^1")
+                    tb.build()
+                } else PlainComplicationText.Builder(shown).build()
                 val b = ShortTextComplicationData.Builder(text = textPart, contentDescription = desc)
                     .setTapAction(tapIntent())
-                if (!ageAsText()) titleText(payload)?.let { b.setTitle(PlainComplicationText.Builder(it).build()) }
+                if (!ageAsText(payload)) titleText(payload)?.let { b.setTitle(PlainComplicationText.Builder(it).build()) }
                 monoImage(payload)?.let { b.setMonochromaticImage(it) }
                 b.build()
             }
             ComplicationType.LONG_TEXT -> {
                 val long = longFormat(payload) ?: return NoDataComplicationData()
-                val shownLong = if (age > Duration.ofHours(2)) "(${long.lowercase()})" else long
-                val longText = if (ageAsText())
+                val shownLong = if (age > Duration.ofHours(2) && !marksAge) "(${long.lowercase()})" else long
+                val longText = if (ageAsText(payload))
                     androidx.wear.watchface.complications.data.TimeDifferenceComplicationText.Builder(
                         androidx.wear.watchface.complications.data.TimeDifferenceStyle.SHORT_SINGLE_UNIT,
                         androidx.wear.watchface.complications.data.CountUpTimeReference(
@@ -200,7 +222,7 @@ abstract class ChannelComplicationService : SuspendingComplicationDataSourceServ
 /** `agents` — Claude Code and friends. "done: wristwork" -> "done", "needs input: x" -> "INPUT". */
 class AgentsComplicationService : ChannelComplicationService() {
     override val topic get() = com.emotiveautomaton.wristwork.BuildConfig.TOPIC_AGENTS
-    override fun ageAsText(): Boolean = true
+    override fun ageAsText(message: String): Boolean = true
     override fun tapActivity(): Class<*> = com.emotiveautomaton.wristwork.ui.AgentsDetailActivity::class.java
     override fun iconRes(message: String): Int = com.emotiveautomaton.wristwork.R.drawable.ic_agents
     private fun project(message: String): String? =
@@ -243,19 +265,29 @@ class RigComplicationService : ChannelComplicationService() {
         val g = glyph(v)
         return (if (g == "!") letter.uppercase() else letter.lowercase()) + g
     }
-    private fun triple(message: String, sep: String): String? =
-        listOfNotNull(
+    private fun num(message: String, k: String): Int? = runCatching {
+        Json.parseToJsonElement(message).jsonObject[k]?.jsonPrimitive?.content?.toDoubleOrNull()?.toInt()
+    }.getOrNull()
+    /** Per-component critical temps (researched 2026-08-24): NVIDIA core throttles 83-90 so
+     *  gpu >= 90 alarms; Ryzen 7000 parks at its 95 TjMax BY DESIGN so cpu alarms only above it. */
+    private fun tempCritical(message: String): Boolean =
+        (num(message, "tg")?.let { it >= 90 } == true) || (num(message, "tc")?.let { it >= 97 } == true)
+    private fun triple(message: String, sep: String): String? {
+        if (tempCritical(message)) return "!!!!!!"
+        return listOfNotNull(
             pct(message, "cpu")?.let { part("c", it) },
-            pct(message, "gpu")?.let { part("g", it) },
+            // G is driven by the busier of gpu/vram (owner 2026-08-24)
+            listOfNotNull(pct(message, "gpu"), pct(message, "vram")).maxOrNull()?.let { part("g", it) },
             pct(message, "ram")?.let { part("r", it) },
         ).joinToString(sep).ifEmpty { null }
+    }
     override fun format(message: String): String = triple(message, " ") ?: message.take(6)
     override fun longFormat(message: String): String? = triple(message, " ")
     override fun iconRes(message: String): Int {
         fun num(k: String) = runCatching {
             Json.parseToJsonElement(message).jsonObject[k]?.jsonPrimitive?.content?.toDoubleOrNull()?.toInt()
         }.getOrNull()
-        val tempCritical = (num("tg")?.let { it >= 90 } == true) || (num("tc")?.let { it >= 95 } == true)
+        val tempCritical = (num("tg")?.let { it >= 90 } == true) || (num("tc")?.let { it >= 97 } == true)
         val loadHigh = listOfNotNull(pct(message, "cpu"), pct(message, "gpu"),
             pct(message, "ram"), pct(message, "vram")).any { it > 90 }
         return when {
@@ -269,13 +301,37 @@ class RigComplicationService : ChannelComplicationService() {
             .maxOrNull()?.toFloat()
 }
 
-/** `printer` — progress/state; `idle` (and staleness) disappears the complication entirely. */
+/**
+ * `printer` — ALWAYS VISIBLE (owner 2026-08-24). While a print runs the face shows the live
+ * percent. Otherwise it shows the printer icon plus a bare ticking age, which reads as
+ * "last print finished N ago" — the record posts at the moment of completion, so the message's
+ * own timestamp IS the completion time. Legacy/startup `idle` has no meaningful completion
+ * moment and renders as the word, never as an age (an age there would be freshness theatre).
+ *
+ * Payload contract (poller.sh, also a Fetch-facing contract):
+ *   "{n}%"                                    while printing, every 5 % step
+ *   "paused" / "ATTN"                         state transitions
+ *   "done · {name} · {dur} · 100%"          print completed
+ *   "stopped · {name} · {dur} · {n}%"       print cancelled or errored out
+ */
 class PrinterComplicationService : ChannelComplicationService() {
     override val topic get() = com.emotiveautomaton.wristwork.BuildConfig.TOPIC_PRINTER
     override fun tapActivity(): Class<*> = com.emotiveautomaton.wristwork.ui.PrinterDetailActivity::class.java
     override fun iconRes(message: String): Int = com.emotiveautomaton.wristwork.R.drawable.ic_printer
-    override fun format(message: String): String? {
+    private fun isRecord(message: String): Boolean {
         val m = message.trim()
-        return if (m.equals("idle", ignoreCase = true)) null else m.take(7)
+        return m.startsWith("done", ignoreCase = true) || m.startsWith("stopped", ignoreCase = true)
     }
+    override fun ageAsText(message: String): Boolean = isRecord(message)
+    override fun ageOnly(message: String): Boolean = isRecord(message)
+    override fun format(message: String): String {
+        val m = message.trim()
+        return when {
+            isRecord(m) -> "done"          // not drawn (ageOnly); carries the content description
+            m.isEmpty() -> "idle"
+            else -> m.take(7)
+        }
+    }
+    override fun longFormat(message: String): String =
+        if (isRecord(message)) "last print" else format(message)
 }

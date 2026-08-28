@@ -1,8 +1,11 @@
 package com.emotiveautomaton.wristwork.ui
 
+import android.content.Intent
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -30,6 +34,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.Text
 import com.emotiveautomaton.wristwork.BuildConfig
 import com.emotiveautomaton.wristwork.net.NtfyClient
@@ -65,6 +70,17 @@ private val HEADER_COLOR = Color(0xFF9EB8D8)
  * History reads straight off the bus cache; nothing new is stored. Back-swipe closes.
  */
 class RigDetailActivity : ComponentActivity() {
+
+    /** Last thing said into the frame. Held only for the moment it is on screen — the audio is
+     *  never recorded by us and the text is not stored, queued or posted (owner 2026-08-25: the
+     *  button is a placeholder for future print requests; the back end is deliberately unbuilt). */
+    private var heard by mutableStateOf<String?>(null)
+
+    private val speech = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+        if (r.resultCode == RESULT_OK) {
+            heard = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -121,6 +137,25 @@ class RigDetailActivity : ComponentActivity() {
                     Spacer(Modifier.height(10.dp))
                     if (procs.isNotEmpty()) ProcHeader()
                     procs.forEach { ProcRow(it) }
+                    // Placeholder, wired to nothing on purpose: speak, see the transcript,
+                    // and it is gone. The destination (a print request) is not designed yet.
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            speech.launch(
+                                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(
+                                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                                )
+                            )
+                        },
+                        modifier = Modifier.size(width = 120.dp, height = 34.dp),
+                    ) { Text("mic", fontSize = 12.sp) }
+                    heard?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text("\u201c$it\u201d", fontSize = 12.sp, color = Color.White)
+                        Text("heard, not kept — no back end yet", fontSize = 10.sp, color = HEADER_COLOR)
+                    }
                     // Round screen: the bottom of the scroll needs clearance to clear the arc.
                     Spacer(Modifier.height(70.dp))
                 }
