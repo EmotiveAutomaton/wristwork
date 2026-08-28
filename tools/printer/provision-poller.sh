@@ -6,7 +6,7 @@ set -eu
 cd "$(dirname "$0")/../.."
 cfg() { sed -n "s/^$1=\([^#]*\).*/\1/p" config.properties | head -1 | xargs; }
 HOST=$(cfg RAID_SSH_HOST); BASE=$(cfg NTFY_BASE_URL); TOPIC=$(cfg TOPIC_PRINTER)
-PHOST=$(cfg PRINTER_HOST); PKEY=$(cfg PRINTER_API_KEY)
+PHOST=$(cfg PRINTER_HOST); PKEY=$(cfg PRINTER_API_KEY); STOKEN=$(cfg NTFY_TOKEN_SVC)
 [ -n "$PHOST" ] && [ -n "$PKEY" ] || { echo "Set PRINTER_HOST and PRINTER_API_KEY in config.properties first."; exit 1; }
 
 ssh -o BatchMode=yes "$HOST" 'mkdir -p /volume1/docker/wristwork/printer'
@@ -19,6 +19,7 @@ ssh -o BatchMode=yes "$HOST" "
     -v /volume1/docker/wristwork/printer:/app:ro \
     -e PRINTER_HOST='$PHOST' -e PRINTER_API_KEY='$PKEY' \
     -e NTFY_TOPIC_URL='http://wristwork-ntfy/$TOPIC' \
+    -e NTFY_TOKEN='$STOKEN' \
     --entrypoint sh curlimages/curl:latest /app/poller.sh
   sleep 2
   sudo -n /usr/local/bin/docker ps --filter name=wristwork-printer --format '{{.Names}}  {{.Status}}'

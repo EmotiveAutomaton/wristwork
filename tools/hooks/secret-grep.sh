@@ -29,6 +29,7 @@ patterns=(
   'ntfy\.sh/[A-Za-z0-9_-]{20,}'                       # ntfy.sh topic URLs
   '(API_KEY|api_key|apikey|PRINTER_API_KEY)\s*[:=]\s*["'"'"']?[A-Za-z0-9]{8,}'
   'tskey-[A-Za-z0-9-]+'                               # tailscale auth keys
+  'tk_[A-Za-z0-9]{10,}'                               # ntfy access tokens
   'gh[pous]_[A-Za-z0-9]{30,}'                         # github tokens
   'ssh-(rsa|ed25519) AAAA'
 )
@@ -37,7 +38,7 @@ if [[ -f config.properties ]]; then
   while IFS='=' read -r k v; do
     v="${v%%#*}"; v="$(echo "$v" | xargs || true)"
     case "$k" in
-      NTFY_BASE_URL|PRINTER_HOST|PRINTER_API_KEY|RAID_SSH_HOST|RIG_SSH_HOST)
+      NTFY_BASE_URL|NTFY_TOKEN|NTFY_TOKEN_SVC|PRINTER_HOST|PRINTER_API_KEY|RAID_SSH_HOST|RIG_SSH_HOST)
         [[ -n "$v" && ${#v} -ge 4 ]] && patterns+=("$(printf '%s' "$v" | sed 's/[.[\*^$\/]/\&/g')");;
       # Topic names count as secrets only once they are secret-shaped (ntfy.sh mode, >=24 random
       # chars). Short tailnet-mode words like "tags" would false-positive across the whole repo.

@@ -18,7 +18,7 @@ NTFY_BASE_URL="${NTFY_BASE_URL:-http://${LAN_IP}:${NTFY_PORT}}"
 $DOCKER network inspect wristwork-net >/dev/null 2>&1 || $DOCKER network create wristwork-net
 $DOCKER pull -q binwiederhier/ntfy:latest
 
-mkdir -p "$DATA_ROOT/ntfy-cache" "$DATA_ROOT/labels"   # Synology daemon refuses to auto-create bind dirs
+mkdir -p "$DATA_ROOT/ntfy-cache" "$DATA_ROOT/ntfy-attach" "$DATA_ROOT/labels"   # Synology daemon refuses to auto-create bind dirs
 
 # The bus. Cache persists across container replacement.
 $DOCKER rm -f wristwork-ntfy >/dev/null 2>&1 || true
@@ -28,6 +28,13 @@ $DOCKER run -d --name wristwork-ntfy --restart=always --network wristwork-net \
   -e NTFY_BASE_URL="$NTFY_BASE_URL" \
   -e NTFY_CACHE_FILE=/var/cache/ntfy/cache.db \
   -e NTFY_CACHE_DURATION=720h \
+  -v "$DATA_ROOT/ntfy-attach:/var/lib/ntfy-attachments" \
+  -e NTFY_ATTACHMENT_CACHE_DIR=/var/lib/ntfy-attachments \
+  -e NTFY_ATTACHMENT_EXPIRY_DURATION=720h \
+  -e NTFY_ATTACHMENT_FILE_SIZE_LIMIT=5M \
+  -e NTFY_MESSAGE_SIZE_LIMIT=32K \
+  -e NTFY_VISITOR_REQUEST_LIMIT_BURST=500 \
+  -e NTFY_VISITOR_REQUEST_LIMIT_REPLENISH=1s \
   binwiederhier/ntfy serve
 
 # The label archiver: every message on topic `tags` becomes one JSON line in labels.jsonl.

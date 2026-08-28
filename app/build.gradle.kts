@@ -30,6 +30,7 @@ android {
         versionName = "0.1.0"
 
         buildConfigField("String", "NTFY_BASE_URL", "\"${cfg("NTFY_BASE_URL")}\"")
+        buildConfigField("String", "NTFY_TOKEN", "\"${cfg("NTFY_TOKEN")}\"")
         buildConfigField("String", "TOPIC_TAGS", "\"${cfg("TOPIC_TAGS")}\"")
         buildConfigField("String", "TOPIC_AGENTS", "\"${cfg("TOPIC_AGENTS")}\"")
         buildConfigField("String", "TOPIC_RIG", "\"${cfg("TOPIC_RIG")}\"")
@@ -39,6 +40,7 @@ android {
         buildConfigField("String", "TOPIC_ACKS", "\"${cfg("TOPIC_ACKS")}\"")
         buildConfigField("String", "TOPIC_FLAGS", "\"${cfg("TOPIC_FLAGS")}\"")
         buildConfigField("String", "TOPIC_HEALTH", "\"${cfg("TOPIC_HEALTH")}\"")
+        buildConfigField("String", "TOPIC_PROMPTS", "\"${cfg("TOPIC_PROMPTS")}\"")
         buildConfigField("int", "CUE_DELAY_MIN", cfg("CUE_DELAY_MIN").ifEmpty { "30" })
     }
 

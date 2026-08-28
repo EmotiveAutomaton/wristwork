@@ -58,9 +58,11 @@ if (Test-Path $flagsFile) {
     if ($recent -eq 0 -and $streamAge.TotalDays -ge $CANARY_DAYS) {
         if (-not (Test-Path $alerted)) {
             try {
+                $hdr = @{ Title = "wristwork canary"; Priority = "high" }
+                if ($cfg['NTFY_TOKEN_SVC']) { $hdr['Authorization'] = "Bearer $($cfg['NTFY_TOKEN_SVC'])" }
                 Invoke-RestMethod -Method Post -Uri "$($cfg['NTFY_BASE_URL'])/$($cfg['TOPIC_AGENTS'])" `
                     -Body "CANARY: no Fitbit notifications captured in $CANARY_DAYS days - flag listener may be broken" `
-                    -Headers @{ Title = "wristwork canary"; Priority = "high" } -TimeoutSec 10 | Out-Null
+                    -Headers $hdr -TimeoutSec 10 | Out-Null
                 New-Item -ItemType File -Force $alerted | Out-Null
             } catch {}
         }

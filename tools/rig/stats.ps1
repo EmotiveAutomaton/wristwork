@@ -10,6 +10,9 @@ Get-Content (Join-Path $root "config.properties") | ForEach-Object {
     if ($_ -match '^\s*([A-Z_]+)\s*=\s*([^#]*)') { $cfg[$Matches[1]] = $Matches[2].Trim() }
 }
 $url = "$($cfg['NTFY_BASE_URL'])/$($cfg['TOPIC_RIG'])"
+# The bus requires a token once it is published to the internet; empty = LAN-only mode.
+$hdr = @{}
+if ($cfg['NTFY_TOKEN_SVC']) { $hdr['Authorization'] = "Bearer $($cfg['NTFY_TOKEN_SVC'])" }
 $alertUrl = "$($cfg['NTFY_BASE_URL'])/$($cfg['TOPIC_AGENTS'])"
 $cap = { param($v) [math]::Min(99, [math]::Max(0, [math]::Round($v))) }
 
@@ -93,16 +96,18 @@ if ($null -ne $tg) { $payload.tg = $tg }
 if ($null -ne $tc) { $payload.tc = $tc }
 if ($procs.Count -gt 0) { $payload.procs = $procs }
 $json = ($payload | ConvertTo-Json -Compress -Depth 4)
-Invoke-RestMethod -Method Post -Uri $url -Body $json -TimeoutSec 10 | Out-Null
+Invoke-RestMethod -Method Post -Uri $url -Body $json -Headers $hdr -TimeoutSec 10 | Out-Null
 
 # --- temperature alert: once per excursion, re-armed after cooldown ---
-$GPU_UNSAFE = 90; $CPU_UNSAFE = 95
+# Ryzen 7000 parks at its 95 C TjMax by design (normal under load); only above it is anomalous.
+$GPU_UNSAFE = 90; $CPU_UNSAFE = 97
 $hot = ($null -ne $tg -and $tg -ge $GPU_UNSAFE) -or ($null -ne $tc -and $tc -ge $CPU_UNSAFE)
 $flag = Join-Path (Join-Path $root "data") "rig-hot.flag"
 if ($hot -and -not (Test-Path $flag)) {
     $msg = "RIG HOT:" + $(if ($null -ne $tg) { " gpu ${tg}C" }) + $(if ($null -ne $tc) { " cpu ${tc}C" })
+    $alertHdr = $hdr.Clone(); $alertHdr['Title'] = "rig temperature"; $alertHdr['Priority'] = "high"
     Invoke-RestMethod -Method Post -Uri $alertUrl -Body $msg `
-        -Headers @{ Title = "rig temperature"; Priority = "high" } -TimeoutSec 10 | Out-Null
+        -Headers $alertHdr -TimeoutSec 10 | Out-Null
     New-Item -ItemType File -Force $flag | Out-Null
 } elseif (-not $hot -and (Test-Path $flag)) {
     Remove-Item $flag -Force

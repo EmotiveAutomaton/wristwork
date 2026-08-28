@@ -7,6 +7,8 @@ import okhttp3.Request
 /**
  * Minimal PrusaLink client with HTTP digest auth (OkHttp has no built-in digest; PrusaLink
  * speaks digest only — user `maker`, password = the API key). Watch and printer share the LAN.
+ * Uses the credential-free client on purpose: the bus token must never reach the printer, and an
+ * Authorization header added by an interceptor would clobber the digest response.
  */
 object PrusaClient {
     private const val USER = "maker"
@@ -22,7 +24,7 @@ object PrusaClient {
     /** GET with one 401 round-trip to answer the digest challenge. Returns body bytes or null. */
     fun get(path: String): ByteArray? = runCatching {
         val url = "http://$host$path"
-        NtfyClient.http.newCall(Request.Builder().url(url).build()).execute().use { first ->
+        NtfyClient.plain.newCall(Request.Builder().url(url).build()).execute().use { first ->
             if (first.isSuccessful) return first.body.bytes()
             if (first.code != 401) return null
             val challenge = first.header("WWW-Authenticate") ?: return null
@@ -42,7 +44,7 @@ object PrusaClient {
                 append(", response=\"$response\"")
                 if (qop != null) append(", qop=$qop, nc=00000001, cnonce=\"$cnonce\"")
             }
-            NtfyClient.http.newCall(
+            NtfyClient.plain.newCall(
                 Request.Builder().url(url).header("Authorization", auth).build()
             ).execute().use { second ->
                 if (second.isSuccessful) second.body.bytes() else null
