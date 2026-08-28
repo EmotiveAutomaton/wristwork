@@ -3,9 +3,16 @@
 Runs on the rig every fifteen minutes (Task Scheduler: "wristwork-detect"). Reads the health
 stream off the bus, folds it into five-minute epochs, scores each epoch against a time-of-day
 matched baseline of the owner's own recent days, and writes the result to a derived, recomputable
-file. In SHADOW mode — the default, and where it stays for the first three weeks — that is all it
-does: no prompt is ever sent, so the baseline can warm up and the scores can be judged against
-what actually happened before anything is allowed to interrupt anyone.
+file. In SHADOW mode it stops there. In LIVE mode it also ASKS: when a recent epoch is stranger than
+almost anything else in that time-of-day slot, it posts a prompt, and the watch raises it as the
+same blinded question a random prompt raises. Owner, 2026-08-28: "find some way to arrange
+unusual patterns and then ask what just happened" — the argument being that random sampling of a
+mostly-ordinary life returns mostly neutral labels, which teach a model very little.
+
+Three guards keep that honest. The budget is small and enforced per day. A refractory period stops
+a single strange hour from producing a burst. And the RANDOM stream continues alongside at its own
+budget, because a label the detector asked for cannot be used to measure whether the detector is
+any good — only the unasked-for ones can.
 
 Detector design, sections 3 and 4. Two things it deliberately is NOT:
   * it is not a classifier. It ranks strangeness, nothing more.
@@ -32,6 +39,9 @@ EPOCH_MIN = 5              # epoch length
 BASELINE_DAYS = 7          # how far back the time-of-day baseline reaches
 TOD_BUCKET_MIN = 120       # baseline matches epochs from the same 2-hour slot of the day
 MIN_BASELINE_N = 6         # fewer comparable epochs than this and we score nothing
+WAKING_EPOCHS_PER_DAY = 192   # ~16 waking hours of five-minute epochs; sets the firing percentile
+RECENT_WINDOW_MIN = 25        # only ask about something that happened in the last few minutes
+FLOOR_Z = 2.0                 # never ask about a moment that is not at least this far out
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -150,11 +160,15 @@ def score(now_features, baseline):
             continue
         zs[k] = (v - mu) / sd
     if not zs:
-        return None, {}
-    # One number for ranking: the RMS of the z-scores, which rewards several channels moving
-    # together over one channel spiking alone.
+        return None, {}, 0.0
+    # Two numbers, because they answer different questions. The RMS rewards several channels
+    # moving together. The MAX is the owner's rule — "exceeding standard deviation limits across
+    # any metric would be enough to make an ask" — and it is what decides whether to interrupt,
+    # because one channel doing something genuinely strange is worth a question even when
+    # everything else is ordinary.
     combined = math.sqrt(sum(z * z for z in zs.values()) / len(zs))
-    return combined, zs
+    peak = max(abs(z) for z in zs.values())
+    return combined, zs, peak
 
 
 # The literature priors, transcribed from the design's table. Deliberately mass-spread: the
@@ -174,6 +188,53 @@ def shadow_guess(f, zs):
     if var_up and moving:
         return {"PLAY": .35, "SEEK": .30, "RAGE": .20, "FEAR": .15}
     return {"OTHER": .40, "SEEK": .25, "CARE": .20, "GRIEF": .15}
+
+
+def fire_threshold(peaks, per_day):
+    """Self-calibrating sensitivity: the level only ~per_day epochs a day clear.
+
+    Expressed as a percentile of the owner's own recent distribution rather than a fixed number,
+    so it keeps meaning as the baseline shifts. The floor stops a very calm week from lowering the
+    bar until ordinary moments qualify."""
+    if not peaks:
+        return None
+    frac = max(0.0, 1.0 - (per_day / float(WAKING_EPOCHS_PER_DAY)))
+    ordered = sorted(peaks)
+    idx = min(len(ordered) - 1, int(frac * len(ordered)))
+    return max(FLOOR_Z, ordered[idx])
+
+
+def already_fired_today(rows, now):
+    """(count today, epoch seconds of the most recent firing)."""
+    today = time.strftime("%Y-%m-%d", time.localtime(now))
+    count, last = 0, 0
+    for r in rows:
+        if not r.get("fired"):
+            continue
+        when = r.get("fired_at", r["epoch"])
+        if time.strftime("%Y-%m-%d", time.localtime(when)) == today:
+            count += 1
+        last = max(last, when)
+    return count, last
+
+
+def post_prompt(cfg, epoch_center, now):
+    """One prompt, worded by the WATCH. Nothing here describes what was detected: the copy is
+    identical for random and signal prompts, and that blinding is what keeps the comparison
+    between them meaningful."""
+    body = json.dumps({
+        "prompt_id": "s-%d" % epoch_center,
+        "source": "signal",
+        "deliver_at": int(now),
+        "ts": int(epoch_center),
+    }).encode()
+    url = "%s/%s" % (cfg["NTFY_BASE_URL"].rstrip("/"), cfg.get("TOPIC_PROMPTS", "prompts"))
+    headers = {"User-Agent": "wristwork-detect/1.0", "Priority": "min",
+               "Content-Type": "application/json"}
+    if cfg.get("NTFY_TOKEN_SVC"):
+        headers["Authorization"] = "Bearer " + cfg["NTFY_TOKEN_SVC"]
+    req = urllib.request.Request(url, data=body, headers=headers)
+    urllib.request.urlopen(req, timeout=20).read()
 
 
 def main():
@@ -213,6 +274,7 @@ def main():
 
     now = time.time()
     written = 0
+    scored = []          # (epoch, peak) for everything written this pass
     with open(out_path, "a", encoding="utf-8") as fh:
         for start in sorted(table):
             if start in already or start > now - EPOCH_MIN * 60:
@@ -230,14 +292,16 @@ def main():
                     continue
                 for k, v in orow["f"].items():
                     baseline.setdefault(k, []).append(v)
-            combined, zs = score(row["f"], baseline)
+            combined, zs, peak = score(row["f"], baseline)
             if combined is None:
                 continue
+            scored.append((start, peak))
             fh.write(json.dumps({
                 "epoch": start,
                 "scorer": SCORER_VERSION,
                 "mode": mode,
                 "score": round(combined, 3),
+                "peak_z": round(peak, 3),
                 "z": {k: round(v, 2) for k, v in sorted(zs.items())},
                 "f": {k: round(v, 3) for k, v in sorted(row["f"].items())},
                 "guess": shadow_guess(row["f"], zs),
@@ -246,8 +310,47 @@ def main():
             written += 1
 
     print("scored %d new epochs (%d total in window), mode=%s" % (written, len(table), mode))
-    if mode != "shadow":
-        print("NOTE: live mode would post signal prompts here; that path is not enabled yet.")
+
+    # ---- ask, if the mode allows it and the moment earns it ----
+    rows = []
+    with open(out_path, encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                pass
+    peaks = [r["peak_z"] for r in rows if "peak_z" in r]
+    per_day = float(cfg.get("SIGNAL_PER_DAY", 3))
+    refractory = float(cfg.get("SIGNAL_REFRACTORY_MIN", 90)) * 60
+    threshold = fire_threshold(peaks, per_day)
+    if threshold is None:
+        return
+    fired_today, last_fire = already_fired_today(rows, now)
+    print("threshold peak-z %.2f (target %.0f/day); fired today %d, last %s"
+          % (threshold, per_day, fired_today,
+             time.strftime("%H:%M", time.localtime(last_fire)) if last_fire else "never"))
+    if mode != "live":
+        return
+    if fired_today >= per_day or (last_fire and now - last_fire < refractory):
+        return
+    candidates = [(e, pk) for e, pk in scored
+                  if pk >= threshold and now - e <= RECENT_WINDOW_MIN * 60]
+    if not candidates:
+        return
+    epoch_center, peak = max(candidates, key=lambda c: c[1])
+    epoch_center += EPOCH_MIN * 30      # the middle of the epoch, not its edge
+    try:
+        post_prompt(cfg, epoch_center, now)
+    except Exception as exc:
+        print("prompt post FAILED: %s" % exc)
+        return
+    with open(out_path, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({
+            "epoch": int(epoch_center), "scorer": SCORER_VERSION, "mode": mode,
+            "fired": True, "fired_at": int(now), "peak_z": round(peak, 3),
+            "threshold": round(threshold, 3),
+        }) + "\n")
+    print("ASKED about %s (peak z %.2f)" % (time.strftime("%H:%M", time.localtime(epoch_center)), peak))
 
 
 if __name__ == "__main__":

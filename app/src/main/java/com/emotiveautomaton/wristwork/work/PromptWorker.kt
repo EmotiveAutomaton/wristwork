@@ -49,7 +49,10 @@ class PromptWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         val now = Instant.now().epochSecond
 
         val body = runCatching {
-            val url = "${NtfyClient.baseUrl}/${BuildConfig.TOPIC_PROMPTS}/json?poll=1&since=12h"
+            // 36 h, not 12: prompts are allocated up to a day in advance, so a twelve-hour window
+            // made every afternoon prompt invisible by the time its moment arrived — the
+            // 08-27 prompt was never delivered and looked exactly like an ignored one.
+            val url = "${NtfyClient.baseUrl}/${BuildConfig.TOPIC_PROMPTS}/json?poll=1&since=36h"
             NtfyClient.http.newCall(Request.Builder().url(url).build()).execute()
                 .use { if (it.isSuccessful) it.body.string() else null }
         }.getOrNull() ?: return Result.retry()
@@ -80,7 +83,7 @@ class PromptWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             fired += id
             delivered = true
         }
-        // Bounded: the set only has to outlive the twelve-hour poll window.
+        // Bounded: the set only has to outlive the poll window.
         prefs.edit().putStringSet(KEY_FIRED, fired.toList().takeLast(200).toSet()).apply()
         return if (delivered || body.isNotEmpty()) Result.success() else Result.success()
     }

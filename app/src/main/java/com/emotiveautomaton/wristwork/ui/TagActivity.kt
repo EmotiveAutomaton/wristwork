@@ -237,12 +237,24 @@ class TagActivity : ComponentActivity() {
                     }
                     if (pendingNote != null) Text("note attached", fontSize = 9.sp, color = ACCENT)
 
+                    // A real ECG, on purpose (owner 2026-08-28). The watch's own ECG app records
+                    // thirty seconds of waveform at 250 Hz — the only true beat-to-beat data this
+                    // hardware will give us — and taking it WHILE labelling is what makes it worth
+                    // having, because then the truth and the label describe the same moment.
+                    // Never automatic: that app opens by accident often enough already, and junk
+                    // readings would poison the calibration.
+                    Button(
+                        onClick = { startEcg() },
+                        modifier = Modifier.size(width = 130.dp, height = 30.dp),
+                    ) { Text("ecg \u00b7 hold still 30s", fontSize = 9.sp) }
+
                     // ---- the rules, in small type, until they are second nature (owner) ----
                     Spacer(Modifier.height(6.dp))
                     Text(
                         "long-press = primary · tap = secondary · back saves\n" +
                             "low intensity: Neutral primary + secondaries\n" +
                             "low confidence: secondaries only, no primary\n" +
+                            "ecg: a real 30 s reading, saves first\n" +
                             "timeline: tap jumps to an event, long-press places one\n" +
                             "yours clears away when emptied · detected ones stay",
                         fontSize = 8.sp, color = DIM, textAlign = TextAlign.Center,
@@ -308,6 +320,38 @@ class TagActivity : ComponentActivity() {
             snapped.isBefore(floor) -> floor
             else -> snapped
         }
+    }
+
+    /**
+     * Hand off to the watch's ECG app, saving first so nothing in the editor is lost while we are
+     * away, and dropping a marker in the health stream so the reading can be matched to this
+     * moment when the waveform is pulled from the health API later.
+     */
+    private fun startEcg() {
+        saveIfDirty()
+        val ctx = applicationContext
+        runCatching {
+            runBlocking(Dispatchers.IO) {
+                TagDb.get(ctx).raw().insert(
+                    com.emotiveautomaton.wristwork.data.RawBatch(
+                        ts = OffsetDateTime.now().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+                        payload = "{\"kind\":\"ecg_requested\",\"t\":" +
+                            (System.currentTimeMillis() / 1000) + "}",
+                    )
+                )
+            }
+            DrainWorker.enqueue(ctx)
+        }
+        runCatching {
+            startActivity(
+                Intent(Intent.ACTION_MAIN)
+                    .setClassName(
+                        "com.fitbit.ecg",
+                        "com.google.android.wearable.fitbit.ecg.ui.EcgComposeActivity",
+                    )
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.onFailure { android.util.Log.e("wristwork", "ECG app would not open", it) }
     }
 
     /** The magnifier's "place": start a label about that moment. */
