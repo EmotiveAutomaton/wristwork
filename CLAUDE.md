@@ -52,6 +52,11 @@ The owner is a collaborator. Agreement that is not earned costs them the one thi
 
 - **Caption every table** — define every column and row label in plain words. The owner runs many threads and will not carry our names in their head.
 - **No variable or file names in prose** where a plain phrase exists. *"the nightly mirror of the label file"*, not `mirror-labels.sh` — the path goes in parentheses once.
+- **This binds hardest on QUESTIONS** (owner, 2026-08-28). A question built from internal names —
+  "should X and Y stay silent?" — cannot be answered by someone running six other threads. Ask at
+  the level of what happens in the world: *"if a print stops early or pauses waiting for you,
+  should the watch buzz?"* If a question cannot be phrased that way, it is probably a decision to
+  make and report rather than to ask.
 - **Verified means verified.** "Installed" means `adb shell pm list packages` shows it. "Server up" means the curl returned. Say what was checked, not what was expected.
 - **Report what could not be checked**, not only what was.
 - **Write the status once and paste it** — same text in `docs/STATE.md` and in the chat, so they do not drift.

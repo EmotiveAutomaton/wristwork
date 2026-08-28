@@ -41,5 +41,23 @@ nothing real.
 
 - Raw label data is immutable. Derived artifacts are versioned and recomputable.
 - No secrets, topic names, or server hostnames in git history. The pre-commit hook enforces it.
-- Battery attributable to the app < 3%/day: no foreground services, no alarms, no wake locks.
+- The app must comfortably survive a full wear-day: no foreground services, no alarms, no wake locks.
 - Stale never renders as fresh — every channel signal shows its age.
+- **The random stream is a permanent holdout.** Labels whose `source` is `random` are used for
+  evaluation only — never for training, tuning, or threshold selection, ever. Every claim the
+  detector makes about itself (lift over chance, classifier validation, the gate that lets it show
+  a state on the wrist) is scored exclusively against them. Labels from the `signal`, `self` and
+  `google` sources are trainable. One field carries the whole integrity of the system, so it is
+  written at the moment of capture and never inferred afterwards.
+
+  Historical note for anyone reading the archive: labels before 2026-08-26 use the earlier
+  vocabulary and normalise as `manual` -> `self`, `timeline-retro` -> `self`, `fitbit-flag` ->
+  `google`, `model-alert` -> `signal`. History is not rewritten; the mapping is applied at
+  analysis time.
+
+## Layout note for the detector
+
+`wristwork-detector-design.md` is the design authority for the state detector. The allocator that
+decides when to ask lives on the rig (`tools/rig/prompts.ps1`, daily) and posts prompts to the bus
+ahead of time; the watch fires them when their moment comes. Nothing about a detected state is
+ever shown on the wrist until it beats the time-of-day baseline on random-stream labels.
