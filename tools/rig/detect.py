@@ -48,6 +48,9 @@ RECENT_WINDOW_MIN = 25        # only ask about something that happened in the la
 FLOOR_Z = 2.0                 # never ask about a moment that is not at least this far out
 INTERACTION_QUIET_MIN = 12    # minutes around a label entry that are ours, not the wearer's
 
+# Recorded and available to the rules, but never z-scored: see the note in features().
+NOT_SCORED = {"calories_sum"}
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -129,9 +132,18 @@ def features(bucket):
         half = len(hr) // 2
         if half >= 3:
             f["hr_drift"] = st.mean(hr[half:]) - st.mean(hr[:half])
-    for k in ("steps", "calories", "distance", "floors", "elevation"):
+    # Calories is deliberately NOT a feature (researched 2026-08-28). The platform's calorie
+    # channel is total expenditure: a per-person constant basal rate plus a TIERED function of
+    # heart rate and motion — a quantised, lossy transform of two channels we already record at
+    # far better resolution, and no wearable-affect literature uses estimated energy expenditure
+    # as an arousal marker. Its step-shaped jumps would read as deviations that are really just
+    # the tier changing. It stays in the raw stream (it is free, and it cross-checks motion) and
+    # out of the model.
+    for k in ("steps", "distance", "floors", "elevation"):
         if bucket.get(k):
             f[k + "_sum"] = sum(bucket[k])
+    if bucket.get("calories"):
+        f["calories_sum"] = sum(bucket["calories"])   # motion cross-check only, never scored
     for k in ("skin_temp", "light", "pressure", "cadence"):
         vals = bucket.get(k, [])
         # Cadence reports -1 when there is no walking to measure. That is a sentinel, not a
@@ -166,6 +178,8 @@ def score(now_features, baseline):
     """Symmetric z-scores against the time-of-day baseline; unusual FLATNESS counts too."""
     zs = {}
     for k, v in now_features.items():
+        if k in NOT_SCORED:
+            continue
         hist = baseline.get(k, [])
         if len(hist) < MIN_BASELINE_N:
             continue
@@ -193,7 +207,7 @@ def shadow_guess(f, zs):
     hr_down = zs.get("hr_mean", 0) < -1.0
     var_up = zs.get("hr_sd", 0) > 1.0
     var_down = zs.get("hr_sd", 0) < -1.0
-    moving = f.get("steps_sum", 0) > 20 or zs.get("cadence", 0) > 1.0
+    moving = f.get("steps_sum", 0) > 20 or zs.get("cadence", 0) > 1.0 or f.get("calories_sum", 0) > 3.0
     if hr_up and not moving:
         return {"SEEK": .30, "FEAR": .25, "RAGE": .25, "LUST": .10, "PLAY": .10}
     if hr_down and var_down:

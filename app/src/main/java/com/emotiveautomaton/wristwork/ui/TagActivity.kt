@@ -115,8 +115,16 @@ class TagActivity : ComponentActivity() {
 
     private val speech = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         if (r.resultCode == Activity.RESULT_OK) {
-            pendingNote = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-            if (pendingNote != null) dirty = true
+            val heard = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (heard != null) {
+                pendingNote = heard
+                dirty = true
+                // Kept twice on purpose. Attached to the label it belongs to, AND filed on its
+                // own in the record with a timestamp — because context is the thing physiology
+                // cannot supply, and a note that only exists inside a label is invisible to
+                // anything reading the stream on its own terms.
+                com.emotiveautomaton.wristwork.data.SpokenNote.file(applicationContext, heard, "grid")
+            }
         }
     }
 
@@ -383,6 +391,10 @@ class TagActivity : ComponentActivity() {
                 editingFlagId = tapped.flagId
                 draftTsEvent = tapped.time.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
             }
+            else -> {
+                // The asked-about marker: keep pointing at that moment.
+                draftTsEvent = tapped.time.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+            }
         }
     }
 
@@ -461,7 +473,16 @@ class TagActivity : ComponentActivity() {
                 TimelineItem(OffsetDateTime.parse(it.ts), null, it.id)
             }
             val cutoff = OffsetDateTime.now().minusHours(6)
-            items = (events + flags).filter { it.time.isAfter(cutoff) }.sortedBy { it.time }
+            // The moment being asked about gets its own marker, so opening the grid from a
+            // prompt always shows WHERE on the line the question points (owner 2026-08-28:
+            // "there should pretty much always be a visible triangle near the current time").
+            // Without it the line looks empty until the first label lands on it.
+            val asked = draftTsEvent
+                ?.let { runCatching { OffsetDateTime.parse(it) }.getOrNull() }
+                ?.takeIf { t -> events.none { it.time == t } }
+                ?.let { listOf(TimelineItem(it, null, null)) }
+                ?: emptyList()
+            items = (events + flags + asked).filter { it.time.isAfter(cutoff) }.sortedBy { it.time }
         }
     }
 
@@ -525,6 +546,7 @@ private fun Timeline(
             val color = when {
                 isSel -> ACCENT
                 item.flagId != null -> Color(0xFFFF8080)
+                item.event == null -> ACCENT      // the moment a prompt is asking about
                 else -> Color.White
             }
             val h = if (isSel) 11.dp.toPx() else 8.dp.toPx()

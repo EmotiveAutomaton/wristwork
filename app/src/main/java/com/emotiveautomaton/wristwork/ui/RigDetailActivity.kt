@@ -79,6 +79,10 @@ class RigDetailActivity : ComponentActivity() {
     private val speech = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         if (r.resultCode == RESULT_OK) {
             heard = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            // It is filed now (2026-08-28). No audio is recorded or kept — the platform does the
+            // transcription and we keep the words, timestamped, in the same append-only record as
+            // everything else. What eventually reads them is undecided; losing them was not.
+            heard?.let { com.emotiveautomaton.wristwork.data.SpokenNote.file(applicationContext, it, "rig") }
         }
     }
 
@@ -154,7 +158,7 @@ class RigDetailActivity : ComponentActivity() {
                     heard?.let {
                         Spacer(Modifier.height(6.dp))
                         Text("\u201c$it\u201d", fontSize = 12.sp, color = Color.White)
-                        Text("heard, not kept — no back end yet", fontSize = 10.sp, color = HEADER_COLOR)
+                        Text("filed", fontSize = 10.sp, color = HEADER_COLOR)
                     }
                     // Round screen: the bottom of the scroll needs clearance to clear the arc.
                     Spacer(Modifier.height(70.dp))
