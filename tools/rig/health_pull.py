@@ -104,7 +104,10 @@ def authorise(cfg):
     }
     print("\nOpen this in a browser and approve:\n")
     print(AUTH_URL + "?" + urllib.parse.urlencode(params))
-    print("\nWaiting for the browser to come back (five minutes)...", flush=True)
+    # Half an hour by default: the first attempt lapsed after five minutes because the owner was
+    # doing something else, which is the normal case for a one-time authorisation.
+    wait_s = int(os.environ.get("AUTH_WAIT_SECONDS", "1800"))
+    print("\nWaiting for the browser to come back (%d minutes)..." % (wait_s // 60), flush=True)
 
     import http.server
     import socketserver
@@ -130,7 +133,7 @@ def authorise(cfg):
 
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("127.0.0.1", LOOPBACK_PORT), Handler) as srv:
-        srv.timeout = 300
+        srv.timeout = wait_s
         srv.handle_request()
 
     code = captured.get("code")
