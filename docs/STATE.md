@@ -24,6 +24,35 @@ Printer record: carries the print's own thumbnail, uploaded by the poller as an 
 untouched). Rig frame: a deliberately unwired `mic` button — speak, see the transcript, it is
 dropped. APK builds clean; the watch was asleep at install time, so none of it is on the wrist yet.
 
+## 2026-08-28: TRUE HRV, from the watch, without a chest strap
+
+The health API is authorised and the ECG path works end to end. Three readings came back as
+7,500 samples each — thirty seconds at 250 Hz of actual voltage — and beat detection on two of
+them produced genuine beat-to-beat intervals:
+
+    06:49:33   32 beats   RMSSD 43.5 ms   SDNN 47.7 ms   HR 64.0 (the watch said 63)
+    07:21:01   31 beats   RMSSD 75.1 ms   SDNN 78.3 ms   HR 61.7 (the watch said 60)
+
+The heart rate derived from our own R-peak detection agrees with the watch's own average to
+within about one beat per minute, which is the check that the beats found were really beats. The
+third reading was contact noise and was REJECTED rather than filed: it yielded four "beats" and an
+RMSSD of a full second, and a bad trace does not fail loudly, it produces numbers. The gate is
+disagreement with the watch's own average, plus physiological bounds.
+
+Both readings sit beside labels the owner entered seconds earlier. That is the pairing this whole
+build was walking toward, and the chest strap is now a nice-to-have rather than the only door.
+
+Three bugs found and fixed getting here: the scopes are grouped rather than per-metric (the
+consent screen named exactly which guesses were invalid); the deduplication key fell back to
+Python's randomised hash, so every run re-filed everything it had already filed; and a 45 KB ECG
+record silently became a file attachment on the bus instead of a JSON line, so the waveform is
+now chunked the same way the watch chunks its own oversized batches.
+
+KNOWN, AND ON A CLOCK: refresh tokens issued while an OAuth consent screen is in TESTING expire
+after seven days. The fix is to set the consent screen's publishing status to "In production" —
+an unverified production app still works for its own developer. Until then the pipeline goes
+quiet in a week, and the puller now says so in plain words instead of dying with a stack trace.
+
 ## 2026-08-28 (later): the sealed sensors, answered with measurements
 
 Asked on the device rather than argued about. The private-sensor permission cannot be granted —

@@ -21,6 +21,7 @@ config and never leaves this machine.
 Run with no arguments to fetch. Idempotent: a state file records what has already been filed, so
 running it hourly cannot duplicate anything.
 """
+import hashlib
 import json
 import os
 import sys
@@ -46,12 +47,16 @@ REDIRECT = "http://127.0.0.1:%d" % LOOPBACK_PORT
 # after a data type is rejected outright — "heart_rate_variability" and "oxygen_saturation" are
 # not scopes, they are metrics that live inside the health-metrics group (measured against the
 # consent screen 2026-08-28, which named exactly which of our guesses were invalid).
+# Probed against the live API rather than guessed: electrocardiogram, heart-rate-variability,
+# sleep, oxygen-saturation and heart-rate are real ids; every spelling of breathing rate, skin
+# temperature and resting heart rate was rejected, and there is no endpoint that lists the valid
+# ones. Breathing rate can be added the day someone learns what it is called. Heart rate is left
+# out on purpose — the watch already streams it directly at far better resolution.
 WANTED = [
     ("electrocardiogram", "ecg"),
     ("heart-rate-variability", "hrv"),
     ("sleep", "sleep"),
     ("oxygen-saturation", "spo2"),
-    ("respiratory-rate", "breathing"),
 ]
 SCOPES = ["https://www.googleapis.com/auth/googlehealth.%s.readonly" % s for s in (
     "ecg",                                # the waveform: the whole reason for this pipeline
@@ -161,6 +166,25 @@ def authorise(cfg):
 
 
 def access_token(cfg):
+    """Trade the refresh token for a live one.
+
+    A refresh token issued while the OAuth consent screen is still in TESTING expires after seven
+    days — Google's rule, not ours. When that happens this call fails with invalid_grant and the
+    whole pipeline goes quiet, so it says exactly what is wrong and what to do about it rather
+    than dying with a stack trace."""
+    try:
+        return _refresh(cfg)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")
+        if "invalid_grant" in body:
+            print("The Google authorisation has expired.")
+            print("Long-term fix: in the Cloud console, set the OAuth consent screen's publishing")
+            print("status to 'In production' — testing-mode tokens last only seven days.")
+            print("Then re-authorise:  python tools/rig/health_pull.py --auth")
+        raise
+
+
+def _refresh(cfg):
     tok = post_form(TOKEN_URL, {
         "client_id": cfg["GHEALTH_CLIENT_ID"],
         "client_secret": cfg["GHEALTH_CLIENT_SECRET"],
@@ -181,7 +205,35 @@ def get_json(url, token, params=None):
         return json.loads(r.read().decode())
 
 
+# Comfortably under the bus's message limit, with room for the wrapper.
+MAX_BYTES = 24_000
+
+
 def publish(cfg, payload):
+    """One record, one line — splitting the waveform when it will not fit.
+
+    A thirty-second ECG reading is about 45 KB of JSON, and a message over the limit is silently
+    turned into a file attachment by the server: the data survives, but the archive line becomes
+    "You received a file" and stops being one JSON record per line. Chunking keeps the contract."""
+    body = json.dumps(payload).encode()
+    if len(body) > MAX_BYTES:
+        ecg = (payload.get("point") or {}).get("electrocardiogram") or {}
+        samples = ecg.get("waveformSamples")
+        if isinstance(samples, list) and samples:
+            per = 2000                                   # ~8 s of signal, ~12 KB of JSON
+            parts = (len(samples) + per - 1) // per
+            for i in range(parts):
+                piece = json.loads(json.dumps(payload))   # deep copy, cheap at this size
+                piece["point"]["electrocardiogram"]["waveformSamples"] = \
+                    samples[i * per:(i + 1) * per]
+                piece["part"] = i
+                piece["parts"] = parts
+                publish_one(cfg, piece)
+            return
+    publish_one(cfg, payload)
+
+
+def publish_one(cfg, payload):
     body = json.dumps(payload).encode()
     url = "%s/%s" % (cfg["NTFY_BASE_URL"].rstrip("/"), cfg.get("TOPIC_HEALTH", "health"))
     headers = {"User-Agent": "wristwork-health-pull/1.0", "Priority": "min",
@@ -206,11 +258,16 @@ def save_state(state):
 
 
 def point_id(kind, dp):
-    """A stable identity for a data point, so an hourly run cannot file it twice."""
+    """A stable identity for a data point, so an hourly run cannot file it twice.
+
+    STABLE is the operative word: the first version fell back to Python's built-in hash(), which
+    is randomised per process, so every run invented new identities and re-filed everything it had
+    already filed. A digest of the content does not have that problem."""
     for key in ("name", "id", "dataPointId", "startTime", "time"):
         if isinstance(dp, dict) and dp.get(key):
             return "%s:%s" % (kind, dp[key])
-    return "%s:%s" % (kind, hash(json.dumps(dp, sort_keys=True)[:400]))
+    digest = hashlib.sha1(json.dumps(dp, sort_keys=True).encode()).hexdigest()[:16]
+    return "%s:%s" % (kind, digest)
 
 
 def main():
