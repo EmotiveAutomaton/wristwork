@@ -23,8 +23,12 @@ The prior-only "shadow guess" — a mixture over the eight states derived from t
 in the design, with NO learned parameters — is logged beside each epoch and never displayed. Its
 running hit rate against real labels is a free test of whether those priors describe this person.
 
-Output: data/detector.jsonl, one line per epoch scored, versioned by SCORER_VERSION. Raw data is
-never modified; this file can be deleted and recomputed at any time.
+Two output files, and the split matters. data/detector.jsonl holds one line per epoch scored,
+versioned by SCORER_VERSION — a derived artifact that can be deleted and recomputed at any time.
+data/detector-asks.jsonl holds every prompt actually sent. That is not derived: it is a record of
+something that happened in the world, it is what the daily budget and the quiet period are counted
+against, and it must survive any recompute. (Learned immediately: recomputing the scores wiped the
+firing history and the detector promptly asked again inside its own quiet period.)
 """
 import json
 import math
@@ -42,6 +46,7 @@ MIN_BASELINE_N = 6         # fewer comparable epochs than this and we score noth
 WAKING_EPOCHS_PER_DAY = 192   # ~16 waking hours of five-minute epochs; sets the firing percentile
 RECENT_WINDOW_MIN = 25        # only ask about something that happened in the last few minutes
 FLOOR_Z = 2.0                 # never ask about a moment that is not at least this far out
+INTERACTION_QUIET_MIN = 12    # minutes around a label entry that are ours, not the wearer's
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -129,6 +134,10 @@ def features(bucket):
             f[k + "_sum"] = sum(bucket[k])
     for k in ("skin_temp", "light", "pressure", "cadence"):
         vals = bucket.get(k, [])
+        # Cadence reports -1 when there is no walking to measure. That is a sentinel, not a
+        # measurement, and averaging it into a baseline would be nonsense.
+        if k == "cadence":
+            vals = [v for v in vals if v >= 0]
         if vals:
             f[k] = st.mean(vals)
             if len(vals) >= 3:
@@ -137,9 +146,15 @@ def features(bucket):
 
 
 def usable(bucket):
-    """A reading is about the wearer only if the watch was on the wrist and they were awake."""
+    """A reading is about the wearer only if the watch was on the wrist and they were awake.
+
+    The sensor is NAMED off-body detect but reports 1.0 for ON body and 0.0 for OFF (Android's
+    own definition, and confirmed on-device: readings of 1.0 came with a live pulse and skin at
+    35 C). This mask was written the other way round for a day, which would have thrown away every
+    worn epoch and kept only the ones recorded on the charger — the exact inversion that ruins a
+    dataset while looking like it is working."""
     off = bucket.get("offbody", [])
-    if off and st.mean(off) > 0.5:      # 1.0 = off body on this device
+    if off and st.mean(off) < 0.5:
         return False, "offbody"
     act = bucket.get("activity", [])
     if act and act[-1] == "USER_ACTIVITY_ASLEEP":
@@ -218,6 +233,27 @@ def already_fired_today(rows, now):
     return count, last
 
 
+def label_times(cfg):
+    """When labels were ENTERED, so the detector never asks about a moment it created itself.
+
+    Answering a prompt means looking at a watch and thinking about feelings for a minute, which
+    moves a heart rate all by itself. Those minutes are genuinely unusual and completely
+    uninteresting, and without this the thing feeds on its own tail."""
+    out = []
+    try:
+        for _, payload in fetch(cfg, cfg.get("TOPIC_TAGS", "tags"), "48h"):
+            ts = payload.get("ts_entered")
+            if not ts:
+                continue
+            try:
+                out.append(time.mktime(time.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S")))
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return out
+
+
 def post_prompt(cfg, epoch_center, now):
     """One prompt, worded by the WATCH. Nothing here describes what was detected: the copy is
     identical for random and signal prompts, and that blinding is what keeps the comparison
@@ -241,6 +277,7 @@ def main():
     cfg = config()
     mode = cfg.get("DETECTOR_MODE", "shadow").strip().lower()
     out_path = os.path.join(ROOT, "data", "detector.jsonl")
+    asks_path = os.path.join(ROOT, "data", "detector-asks.jsonl")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
     buckets = epochs_from(fetch(cfg, cfg.get("TOPIC_HEALTH", "health"),
@@ -319,13 +356,21 @@ def main():
                 rows.append(json.loads(line))
             except Exception:
                 pass
+    asks = []
+    if os.path.exists(asks_path):
+        with open(asks_path, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    asks.append(json.loads(line))
+                except Exception:
+                    pass
     peaks = [r["peak_z"] for r in rows if "peak_z" in r]
     per_day = float(cfg.get("SIGNAL_PER_DAY", 3))
     refractory = float(cfg.get("SIGNAL_REFRACTORY_MIN", 90)) * 60
     threshold = fire_threshold(peaks, per_day)
     if threshold is None:
         return
-    fired_today, last_fire = already_fired_today(rows, now)
+    fired_today, last_fire = already_fired_today(asks, now)
     print("threshold peak-z %.2f (target %.0f/day); fired today %d, last %s"
           % (threshold, per_day, fired_today,
              time.strftime("%H:%M", time.localtime(last_fire)) if last_fire else "never"))
@@ -333,8 +378,13 @@ def main():
         return
     if fired_today >= per_day or (last_fire and now - last_fire < refractory):
         return
-    candidates = [(e, pk) for e, pk in scored
-                  if pk >= threshold and now - e <= RECENT_WINDOW_MIN * 60]
+    entered = label_times(cfg)
+    candidates = [
+        (e, pk) for e, pk in scored
+        if pk >= threshold
+        and now - e <= RECENT_WINDOW_MIN * 60
+        and not any(abs(e - t) < INTERACTION_QUIET_MIN * 60 for t in entered)
+    ]
     if not candidates:
         return
     epoch_center, peak = max(candidates, key=lambda c: c[1])
@@ -344,9 +394,9 @@ def main():
     except Exception as exc:
         print("prompt post FAILED: %s" % exc)
         return
-    with open(out_path, "a", encoding="utf-8") as fh:
+    with open(asks_path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps({
-            "epoch": int(epoch_center), "scorer": SCORER_VERSION, "mode": mode,
+            "epoch": int(epoch_center), "scorer": SCORER_VERSION,
             "fired": True, "fired_at": int(now), "peak_z": round(peak, 3),
             "threshold": round(threshold, 3),
         }) + "\n")
