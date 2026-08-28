@@ -5,12 +5,17 @@ import android.content.Intent
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,7 +24,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -27,19 +31,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Button
-import androidx.wear.compose.material.ButtonDefaults
 import androidx.wear.compose.material.Icon
-import androidx.wear.compose.material.InlineSlider
-import androidx.wear.compose.material.InlineSliderDefaults
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.ToggleChip
 import androidx.wear.compose.material.ToggleChipDefaults
@@ -52,285 +55,503 @@ import com.emotiveautomaton.wristwork.work.DrainWorker
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.UUID
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 private val HEADER_COLOR = Color(0xFF9EB8D8)
 private val ACCENT = Color(0xFFFFB36B)
-private val CHIP_BG = Color(0xFF2A2F3A)
+private val PRIMARY_BG = Color(0xFF3B5A8C)
+private val CELL_BG = Color(0xFF2A2F3A)
+private val LINE_COLOR = Color(0xFF4A5568)
+private val DIM = Color(0xFF7A8494)
 
-/** One timeline entry: a labeled event (latest revision) or an unlabeled body-response flag. */
+/** A label row is a tombstone when its primary reads this: removal is an append, like everything. */
+private const val DELETED = "DELETED"
+
+/** One timeline marker: a labeled event (latest revision) or an unlabeled body-response flag. */
 private data class TimelineItem(
     val time: OffsetDateTime,
-    val label: String,        // humane display or "flag"
-    val eventId: String?,     // set for label events (relabel target)
-    val flagId: Long?,        // set for flags (label-this target)
+    val event: TagEvent?,
+    val flagId: Long?,
 )
 
 /**
- * Grid v2 (HEALTH_DESIGN.md UX contract). Fast path unchanged: single tap on a state = primary
- * only, submit, auto-close. Long-press a state = elaborate mode: that state is dominant,
- * further taps toggle secondaries, sliders (intensity/confidence) and confirm appear.
- * Timeline strip on top: last events + flags; tap = relabel/label-that; the `+` chip creates a
- * retro event whose time is set with 15-min arrows (position-scrubbing was rejected as too
- * imprecise). Backing out discards — that is the whole undo. Every submit is an APPEND;
- * revisions carry the same eventId + a `revises` pointer. Mic note at the very bottom.
+ * The state editor.
+ *
+ * Interaction (owner, 2026-08-24, extended 2026-08-28). Nothing commits on tap: LONG-PRESS a
+ * state sets the primary, TAP toggles a secondary, BACK saves whatever is dirty. Selecting a
+ * timeline event saves the current edit and loads that one, so the whole six-hour window stays
+ * editable.
+ *
+ * The sliders are gone (owner, 2026-08-28) and their meaning moved into the grid itself — less to
+ * operate, and the owner's argument is that a forced 1-to-5 invents precision that was never felt:
+ *   * low intensity  = NEUTRAL as the primary, with secondaries carrying the flavour
+ *   * low confidence = secondaries only, no primary at all — a label that declines to say what it
+ *     mainly was. That SAVES. It is data, not an unfinished form.
+ * An event emptied completely — no primary, no secondaries — is REMOVED by appending a tombstone.
+ * That is how the owner deletes something they placed themselves. Flags and prompts placed by the
+ * system are not labels and cannot be removed at all.
  */
 class TagActivity : ComponentActivity() {
 
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var pendingNote: String? = null
+    // Editor state lives on the activity so the back-press save can reach it.
+    private var editingBase by mutableStateOf<TagEvent?>(null)   // row being revised, null = draft
+    private var editingFlagId by mutableStateOf<Long?>(null)
+    private var draftTsEvent by mutableStateOf<String?>(null)    // set for placed/flag/prompt drafts
+    private var primary by mutableStateOf<String?>(null)
+    private var secondaries by mutableStateOf(setOf<String>())
+    private var noticedBefore by mutableStateOf(false)
+    private var dirty by mutableStateOf(false)
+    private var pendingNote by mutableStateOf<String?>(null)
+    private var items by mutableStateOf<List<TimelineItem>>(emptyList())
+
+    /** Non-null while the magnifier is open: the moment the cursor sits on. */
+    private var scrubAt by mutableStateOf<OffsetDateTime?>(null)
+
+    private var promptId: String? = null
+    private var promptTs: String? = null
+    private var promptSource: String? = null
 
     private val speech = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         if (r.resultCode == Activity.RESULT_OK) {
             pendingNote = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (pendingNote != null) dirty = true
+        }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        intent.getLongExtra(EXTRA_FLAG_REF, -1L).takeIf { it >= 0 }?.let { editingFlagId = it }
+        // Opened from a prompt: the label is about the moment the prompt names, not the moment the
+        // notification was finally tapped.
+        promptId = intent.getStringExtra(EXTRA_PROMPT_ID)
+        promptTs = intent.getStringExtra(EXTRA_PROMPT_TS)
+        promptSource = intent.getStringExtra(EXTRA_PROMPT_SOURCE)
+        if (promptTs != null) draftTsEvent = promptTs
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (scrubAt != null) { scrubAt = null; return }   // back closes the magnifier first
+                saveIfDirty()
+                finish()
+            }
+        })
+
+        setContent {
+            WristTheme {
+                LaunchedEffect(Unit) { reloadTimeline() }
+                Column(
+                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    // The magnifier needs room, so the whole screen rides up when it opens.
+                    Spacer(Modifier.height(if (scrubAt != null) 18.dp else 44.dp))
+
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 22.dp)) {
+                        val at = scrubAt
+                        if (at == null) {
+                            Timeline(
+                                items, selectedItem(),
+                                onSelect = { tapped -> selectItem(tapped) },
+                                onScrub = { t -> scrubAt = snap15(t) },
+                            )
+                        } else {
+                            Magnifier(center = at, items = items,
+                                onMove = { minutes -> scrubAt = snap15(at.plusMinutes(minutes)) })
+                        }
+                    }
+
+                    val at = scrubAt
+                    if (at != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text("<", fontSize = 18.sp, color = ACCENT, modifier = Modifier
+                                .combinedClickable(onClick = { scrubAt = snap15(at.minusMinutes(15)) })
+                                .padding(6.dp))
+                            Text(at.format(DateTimeFormatter.ofPattern("H:mm")),
+                                fontSize = 15.sp, color = Color.White)
+                            Text(">", fontSize = 18.sp, color = ACCENT, modifier = Modifier
+                                .combinedClickable(onClick = { scrubAt = snap15(at.plusMinutes(15)) })
+                                .padding(6.dp))
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(onClick = { placeAt(at) },
+                                modifier = Modifier.size(width = 92.dp, height = 32.dp)) {
+                                Text("place", fontSize = 11.sp)
+                            }
+                            Button(onClick = { scrubAt = null },
+                                modifier = Modifier.size(width = 68.dp, height = 32.dp)) {
+                                Text("back", fontSize = 11.sp)
+                            }
+                        }
+                    } else {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp)) {
+                            Text("6h", fontSize = 9.sp, color = HEADER_COLOR,
+                                modifier = Modifier.weight(1f))
+                            Text("now", fontSize = 9.sp, color = HEADER_COLOR)
+                        }
+                    }
+
+                    // context line: what is being edited
+                    val ctxLine = when {
+                        editingBase != null -> "editing " + fmtT(editingBase!!.tsEvent)
+                        editingFlagId != null -> "labeling flagged moment"
+                        promptId != null && draftTsEvent != null -> "asked at " + fmtT(draftTsEvent!!)
+                        draftTsEvent != null -> "placed at " + fmtT(draftTsEvent!!)
+                        else -> null
+                    }
+                    ctxLine?.let { Text(it, fontSize = 10.sp, color = ACCENT) }
+
+                    // ---- grid 3/3/3: long-press = primary, tap = secondary, clear empties ----
+                    (StateNames.CANONICAL + listOf("__CLEAR__")).chunked(3).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            row.forEach { canon -> GridCell(canon) }
+                        }
+                    }
+
+                    // ---- auxiliary: noticed toggle + mic note ----
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ToggleChip(
+                            checked = noticedBefore,
+                            onCheckedChange = { noticedBefore = it; dirty = true },
+                            label = { Text("noticed?", fontSize = 10.sp) },
+                            toggleControl = { Icon(ToggleChipDefaults.switchIcon(checked = noticedBefore), null) },
+                            modifier = Modifier.size(width = 128.dp, height = 30.dp),
+                        )
+                        Button(
+                            onClick = {
+                                speech.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(
+                                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM))
+                            },
+                            modifier = Modifier.size(width = 84.dp, height = 30.dp),
+                        ) { Text("mic note", fontSize = 10.sp) }
+                    }
+                    if (pendingNote != null) Text("note attached", fontSize = 9.sp, color = ACCENT)
+
+                    // ---- the rules, in small type, until they are second nature (owner) ----
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "long-press = primary · tap = secondary · back saves\n" +
+                            "low intensity: Neutral primary + secondaries\n" +
+                            "low confidence: secondaries only, no primary\n" +
+                            "timeline: tap jumps to an event, long-press places one\n" +
+                            "yours clears away when emptied · detected ones stay",
+                        fontSize = 8.sp, color = DIM, textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(44.dp))
+                }
+            }
         }
     }
 
     @OptIn(ExperimentalFoundationApi::class)
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        val cueFlagRef = intent.getLongExtra(EXTRA_FLAG_REF, -1L).takeIf { it >= 0 }
-        setContent {
-            WristTheme {
-                var noticedBefore by remember { mutableStateOf(false) }
-                var dominant by remember { mutableStateOf<String?>(null) }   // null = fast mode
-                var secondaries by remember { mutableStateOf(setOf<String>()) }
-                var intensity by remember { mutableStateOf(0f) }             // 0 = unset, 1..5
-                var confidence by remember { mutableStateOf(0f) }
-                var timeline by remember { mutableStateOf<List<TimelineItem>>(emptyList()) }
-                var relabelOf by remember { mutableStateOf<TagEvent?>(null) }
-                var labelFlagId by remember { mutableStateOf(cueFlagRef) }
-                var retroMinutes by remember { mutableStateOf<Int?>(null) }  // minutes ago, 15-step
-
-                LaunchedEffect(Unit) {
-                    withContext(Dispatchers.IO) {
-                        val db = TagDb.get(applicationContext)
-                        val events = db.tags().latestEvents(3).map {
-                            TimelineItem(OffsetDateTime.parse(it.tsEvent),
-                                StateNames.humane(it.primaryState), it.eventId, null)
-                        }
-                        val flags = db.flags().latestBodyResponses(2).map {
-                            TimelineItem(OffsetDateTime.parse(it.ts), "flag", null, it.id)
-                        }
-                        timeline = (events + flags).sortedByDescending { it.time }.take(3)
-                    }
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                        .padding(horizontal = 14.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Spacer(Modifier.height(26.dp))
-
-                    // ---- timeline strip ----
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        timeline.forEach { item ->
-                            val selected = (item.eventId != null && item.eventId == relabelOf?.eventId) ||
-                                (item.flagId != null && item.flagId == labelFlagId)
-                            Text(
-                                "${item.time.format(DateTimeFormatter.ofPattern("H:mm"))} ${item.label}",
-                                fontSize = 10.sp,
-                                color = if (selected) ACCENT else HEADER_COLOR,
-                                modifier = Modifier
-                                    .background(CHIP_BG, RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 6.dp, vertical = 3.dp)
-                                    .combinedClickable(onClick = {
-                                        if (item.eventId != null) {
-                                            appScope.launch {
-                                                relabelOf = TagDb.get(applicationContext).tags().currentOf(item.eventId)
-                                            }
-                                            labelFlagId = null; retroMinutes = null
-                                        } else if (item.flagId != null) {
-                                            labelFlagId = item.flagId; relabelOf = null; retroMinutes = null
-                                        }
-                                    }),
-                            )
-                        }
-                        // retro event creator
-                        Text(
-                            "+", fontSize = 12.sp, color = ACCENT,
-                            modifier = Modifier.background(CHIP_BG, RoundedCornerShape(8.dp))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                                .combinedClickable(onClick = {
-                                    retroMinutes = 15; relabelOf = null; labelFlagId = null
-                                }),
-                        )
-                    }
-
-                    // ---- mode banner / retro time arrows ----
-                    relabelOf?.let {
-                        Text("relabeling ${it.tsEvent.substring(11, 16)} ${StateNames.humane(it.primaryState)}",
-                            fontSize = 10.sp, color = ACCENT)
-                    }
-                    if (labelFlagId != null) Text("labeling flagged moment", fontSize = 10.sp, color = ACCENT)
-                    retroMinutes?.let { mins ->
-                        Row(verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("<", fontSize = 18.sp, color = ACCENT,
-                                modifier = Modifier.combinedClickable(onClick = { retroMinutes = mins + 15 })
-                                    .padding(6.dp))
-                            Text(
-                                OffsetDateTime.now().minusMinutes(mins.toLong())
-                                    .format(DateTimeFormatter.ofPattern("H:mm")),
-                                fontSize = 13.sp, color = Color.White, textAlign = TextAlign.Center,
-                            )
-                            Text(">", fontSize = 18.sp, color = ACCENT,
-                                modifier = Modifier.combinedClickable(
-                                    onClick = { retroMinutes = (mins - 15).coerceAtLeast(0) })
-                                    .padding(6.dp))
-                        }
-                    }
-
-                    ToggleChip(
-                        checked = noticedBefore,
-                        onCheckedChange = { noticedBefore = it },
-                        label = { Text("noticed before?", fontSize = 11.sp) },
-                        toggleControl = { Icon(ToggleChipDefaults.switchIcon(checked = noticedBefore), null) },
-                        modifier = Modifier.fillMaxWidth().height(36.dp),
-                    )
-
-                    // ---- grid 3/3/2 ----
-                    StateNames.CANONICAL.chunked(3).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            row.forEach { canon ->
-                                val isDominant = dominant == canon
-                                val isSecondary = canon in secondaries
-                                Button(
-                                    onClick = {
-                                        when {
-                                            dominant == null ->
-                                                commit(canon, emptySet(), noticedBefore, null, null,
-                                                    relabelOf, labelFlagId, retroMinutes)
-                                            dominant == "" -> dominant = canon   // armed: set dominant
-                                            isDominant -> {}   // tap on dominant: no-op
-                                            else -> secondaries =
-                                                if (isSecondary) secondaries - canon else secondaries + canon
-                                        }
-                                    },
-                                    modifier = Modifier.size(width = 62.dp, height = 38.dp),
-                                    colors = when {
-                                        isDominant -> ButtonDefaults.primaryButtonColors()
-                                        isSecondary -> ButtonDefaults.secondaryButtonColors(
-                                            contentColor = ACCENT)
-                                        else -> ButtonDefaults.secondaryButtonColors()
-                                    },
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(StateNames.humane(canon), fontSize = 12.sp)
-                                        Text(canon.lowercase(), fontSize = 7.sp, color = HEADER_COLOR)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    // long-press entry into elaborate mode: a dedicated row (Buttons swallow
-                    // long-press unreliably across faces; an explicit toggle is the honest control)
-                    if (dominant == null) {
-                        Text(
-                            "mix…", fontSize = 11.sp, color = HEADER_COLOR,
-                            modifier = Modifier.combinedClickable(onClick = {
-                                dominant = ""   // armed: next tap sets dominant
-                            }).padding(4.dp),
-                        )
-                    }
-                    if (dominant == "") Text("tap the dominant state", fontSize = 10.sp, color = ACCENT)
-
-                    // ---- elaborate mode extras ----
-                    if (!dominant.isNullOrEmpty()) {
-                        SliderRow("intensity", intensity) { intensity = it }
-                        SliderRow("confidence", confidence) { confidence = it }
-                        Button(
-                            onClick = {
-                                commit(dominant!!, secondaries, noticedBefore,
-                                    intensity.toInt().takeIf { it > 0 },
-                                    confidence.toInt().takeIf { it > 0 },
-                                    relabelOf, labelFlagId, retroMinutes)
-                            },
-                            modifier = Modifier.fillMaxWidth().height(36.dp),
-                        ) { Text("confirm", fontSize = 12.sp) }
-                    }
-
-                    Button(
-                        onClick = {
-                            speech.launch(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(
-                                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM))
-                        },
-                        modifier = Modifier.size(width = 70.dp, height = 32.dp),
-                    ) { Text("mic note", fontSize = 10.sp) }
-                    Spacer(Modifier.height(40.dp))
-                }
-
+    @Composable
+    private fun GridCell(canon: String) {
+        if (canon == "__CLEAR__") {
+            Box(
+                Modifier.size(width = 62.dp, height = 38.dp)
+                    .background(CELL_BG, RoundedCornerShape(19.dp))
+                    .combinedClickable(onClick = { clearSelection() }),
+                contentAlignment = Alignment.Center,
+            ) { Text("clear", fontSize = 11.sp, color = HEADER_COLOR) }
+            return
+        }
+        val isPrimary = primary == canon
+        val isSecondary = canon in secondaries
+        Box(
+            Modifier.size(width = 62.dp, height = 38.dp)
+                .background(if (isPrimary) PRIMARY_BG else CELL_BG, RoundedCornerShape(19.dp))
+                .combinedClickable(
+                    onClick = {
+                        // Tapping the primary demotes it — the way back out of a primary without
+                        // clearing the whole edit.
+                        if (isPrimary) { primary = null; dirty = true; return@combinedClickable }
+                        secondaries = if (isSecondary) secondaries - canon else secondaries + canon
+                        dirty = true
+                    },
+                    onLongClick = {
+                        primary = canon
+                        secondaries = secondaries - canon
+                        dirty = true
+                    },
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(StateNames.humane(canon), fontSize = 12.sp,
+                    color = if (isSecondary) ACCENT else Color.White)
+                if (StateNames.renamed(canon))
+                    Text(canon.lowercase(), fontSize = 7.sp, color = HEADER_COLOR)
             }
         }
     }
 
-    /** Every submit APPENDS. Revisions share eventId and point at the row they supersede. */
-    private fun commit(
-        primary: String, secondaries: Set<String>, noticedBefore: Boolean,
-        intensity: Int?, confidence: Int?,
-        relabelOf: TagEvent?, labelFlagId: Long?, retroMinutes: Int?,
-    ) {
-        // armed sentinel: first tap in "mix…" mode selects the dominant instead of committing
-        if (primary.isEmpty()) return
+    // ---------- editor mechanics ----------
+
+    /** Quarter-hour resolution, clamped to the six hours the timeline shows. */
+    private fun snap15(t: OffsetDateTime): OffsetDateTime {
+        val now = OffsetDateTime.now().withSecond(0).withNano(0)
+        val snapped = t.withMinute((t.minute / 15) * 15).withSecond(0).withNano(0)
+        val floor = now.minusHours(6)
+        return when {
+            snapped.isAfter(now) -> now
+            snapped.isBefore(floor) -> floor
+            else -> snapped
+        }
+    }
+
+    /** The magnifier's "place": start a label about that moment. */
+    private fun placeAt(t: OffsetDateTime) {
+        saveIfDirty()
+        resetEditor()
+        draftTsEvent = t.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        scrubAt = null
+    }
+
+    private fun selectedItem(): TimelineItem? = items.firstOrNull {
+        (it.event != null && it.event.id == editingBase?.id) ||
+            (it.flagId != null && it.flagId == editingFlagId)
+    }
+
+    private fun selectItem(tapped: TimelineItem?) {
+        saveIfDirty()
+        resetEditor()
+        when {
+            tapped == null -> {}
+            tapped.event != null -> {
+                val e = tapped.event
+                editingBase = e
+                primary = e.primaryState.takeIf { it.isNotBlank() && it != DELETED }
+                secondaries = e.secondaries.split(',').filter { it.isNotBlank() }.toSet()
+                noticedBefore = e.noticedBefore ?: false
+            }
+            tapped.flagId != null -> {
+                editingFlagId = tapped.flagId
+                draftTsEvent = tapped.time.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+            }
+        }
+    }
+
+    /** CLEAR empties the selection. On an existing event that becomes a removal, once you go back. */
+    private fun clearSelection() {
+        primary = null
+        secondaries = setOf()
+        pendingNote = null
+        noticedBefore = false
+        dirty = editingBase != null    // emptying a draft is an undo; emptying a saved row deletes it
+    }
+
+    private fun resetEditor() {
+        editingBase = null; editingFlagId = null; draftTsEvent = null
+        primary = null; secondaries = setOf()
+        noticedBefore = false; dirty = false; pendingNote = null
+    }
+
+    /**
+     * Saving APPENDS, always. Three outcomes:
+     *   * anything selected      -> a new row (a revision, when an existing event was loaded)
+     *   * existing event emptied -> a tombstone row; it leaves the timeline, not the archive
+     *   * empty draft            -> nothing at all, which is the undo
+     */
+    private fun saveIfDirty() {
+        if (!dirty) return
+        val base = editingBase
+        val hasContent = primary != null || secondaries.isNotEmpty()
+        if (!hasContent && base == null) return            // empty draft: discard
         val now = OffsetDateTime.now()
-        val tsEvent = when {
-            relabelOf != null -> relabelOf.tsEvent
-            retroMinutes != null -> now.minusMinutes(retroMinutes.toLong())
-                .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-            else -> now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-        }
+        val tsEvent = base?.tsEvent ?: draftTsEvent
+            ?: now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+        // Canonical source vocabulary (detector design §1). `random` is the permanent evaluation
+        // stream and must never be assigned by anything but a random prompt.
+        val ps = promptSource
         val source = when {
-            relabelOf != null -> relabelOf.source
-            labelFlagId != null -> "fitbit-flag"
-            retroMinutes != null -> "timeline-retro"
-            else -> "manual"
+            base != null -> base.source          // a revision keeps the provenance it was born with
+            ps != null -> ps                     // random | signal
+            editingFlagId != null -> "google"
+            else -> "self"
         }
-        val note = pendingNote
         val ctx = applicationContext
-        appScope.launch {
-            val db = TagDb.get(ctx)
-            db.tags().insert(TagEvent(
-                eventId = relabelOf?.eventId ?: UUID.randomUUID().toString(),
+        val isNowDraft = base == null && draftTsEvent == null && editingFlagId == null
+        runBlocking(Dispatchers.IO) {
+            TagDb.get(ctx).tags().insert(TagEvent(
+                eventId = base?.eventId ?: UUID.randomUUID().toString(),
                 tsEvent = tsEvent,
                 tsEntered = now.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-                primaryState = primary,
+                // An empty primary is a real answer: "I cannot name the main one."
+                primaryState = if (hasContent) (primary ?: "") else DELETED,
                 secondaries = secondaries.joinToString(","),
-                intensity = intensity, confidence = confidence,
-                noticedBefore = noticedBefore, note = note, source = source,
-                flagRef = labelFlagId?.toString(), revises = relabelOf?.id,
+                intensity = null, confidence = null,        // sliders retired 2026-08-28
+                noticedBefore = noticedBefore, note = pendingNote, source = source,
+                flagRef = editingFlagId?.toString(),
+                promptId = base?.promptId ?: promptId, promptTs = base?.promptTs ?: promptTs,
+                revises = base?.id,
             ))
-            if (relabelOf == null && retroMinutes == null) {
-                CurrentState.write(ctx, primary, now.toInstant().toEpochMilli(), noticedBefore)
-                StateComplicationService.requestUpdate(ctx)
+            // Any submission answers a waiting prompt: the face goes back to showing an age.
+            CurrentState.setPromptPending(ctx, false)
+            if (isNowDraft && hasContent) {
+                CurrentState.write(ctx, primary ?: "OTHER", now.toInstant().toEpochMilli(), noticedBefore)
             }
-            DrainWorker.enqueue(ctx)
         }
-        finish()
+        StateComplicationService.requestUpdate(ctx)
+        DrainWorker.enqueue(ctx)
+        dirty = false
     }
 
-    companion object { const val EXTRA_FLAG_REF = "flag_ref" }
+    private suspend fun reloadTimeline() {
+        withContext(Dispatchers.IO) {
+            val db = TagDb.get(applicationContext)
+            val events = db.tags().latestEvents(12).map {
+                TimelineItem(OffsetDateTime.parse(it.tsEvent), it, null)
+            }
+            val flags = db.flags().latestBodyResponses(4).map {
+                TimelineItem(OffsetDateTime.parse(it.ts), null, it.id)
+            }
+            val cutoff = OffsetDateTime.now().minusHours(6)
+            items = (events + flags).filter { it.time.isAfter(cutoff) }.sortedBy { it.time }
+        }
+    }
+
+    private fun fmtT(iso: String) = runCatching {
+        OffsetDateTime.parse(iso).format(DateTimeFormatter.ofPattern("H:mm"))
+    }.getOrDefault("?")
+
+    companion object {
+        const val EXTRA_FLAG_REF = "flag_ref"
+        const val EXTRA_PROMPT_ID = "prompt_id"
+        const val EXTRA_PROMPT_TS = "prompt_ts"
+        const val EXTRA_PROMPT_SOURCE = "prompt_source"
+    }
 }
 
+/**
+ * Horizontal six-hour line; each event is a small arrow above it. A tap jumps to the nearest
+ * event; a long-press opens the magnifier at the moment pressed.
+ */
 @Composable
-private fun SliderRow(label: String, value: Float, onChange: (Float) -> Unit) {
-    Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth()) {
-            Text(label, fontSize = 10.sp, color = HEADER_COLOR, modifier = Modifier.weight(1f))
-            Text(if (value > 0f) "${value.toInt()}" else "–", fontSize = 10.sp, color = ACCENT)
+private fun Timeline(
+    items: List<TimelineItem>,
+    selected: TimelineItem?,
+    onSelect: (TimelineItem?) -> Unit,
+    onScrub: (OffsetDateTime) -> Unit,
+) {
+    val now = OffsetDateTime.now()
+    val windowS = 6f * 3600f
+    Canvas(
+        Modifier.fillMaxWidth().height(40.dp)
+            .pointerInput(items) {
+                detectTapGestures(
+                    onLongPress = { p ->
+                        val frac = (p.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        onScrub(now.minusSeconds(((1f - frac) * windowS).toLong()))
+                    },
+                    onTap = { tap ->
+                        val w = size.width.toFloat()
+                        val nearest = items.minByOrNull {
+                            val x = w * (1f - (java.time.Duration.between(it.time, now).seconds / windowS))
+                            kotlin.math.abs(x - tap.x)
+                        }
+                        val hit = nearest?.let {
+                            val x = w * (1f - (java.time.Duration.between(it.time, now).seconds / windowS))
+                            kotlin.math.abs(x - tap.x) < 26.dp.toPx()
+                        } ?: false
+                        onSelect(if (hit) nearest else null)
+                    },
+                )
+            },
+    ) {
+        val midY = size.height * 0.62f
+        drawLine(LINE_COLOR, Offset(0f, midY), Offset(size.width, midY), 2.dp.toPx())
+        drawLine(HEADER_COLOR, Offset(size.width - 1.5f, midY - 6.dp.toPx()),
+            Offset(size.width - 1.5f, midY + 6.dp.toPx()), 2.dp.toPx())
+        items.forEach { item ->
+            val ageS = java.time.Duration.between(item.time, now).seconds.toFloat()
+            if (ageS > windowS) return@forEach
+            val x = (size.width * (1f - ageS / windowS)).coerceIn(4f, size.width - 4f)
+            val isSel = item == selected
+            val color = when {
+                isSel -> ACCENT
+                item.flagId != null -> Color(0xFFFF8080)
+                else -> Color.White
+            }
+            val h = if (isSel) 11.dp.toPx() else 8.dp.toPx()
+            val wHalf = if (isSel) 5.5f.dp.toPx() else 4f.dp.toPx()
+            val path = Path().apply {
+                moveTo(x, midY - 2.dp.toPx())
+                lineTo(x - wHalf, midY - 2.dp.toPx() - h)
+                lineTo(x + wHalf, midY - 2.dp.toPx() - h)
+                close()
+            }
+            drawPath(path, color)
         }
-        InlineSlider(
-            value = value, onValueChange = onChange,
-            valueRange = 0f..5f, steps = 4,
-            decreaseIcon = { Icon(InlineSliderDefaults.Decrease, "less") },
-            increaseIcon = { Icon(InlineSliderDefaults.Increase, "more") },
-            modifier = Modifier.fillMaxWidth().height(30.dp),
-        )
+    }
+}
+
+/**
+ * The magnifier: a ninety-minute window around the cursor, ticked every quarter hour, so a
+ * particular moment can actually be picked on a watch-sized screen. Drag to pan; the arrows below
+ * step fifteen minutes. Six hours back is the floor, now is the ceiling.
+ */
+@Composable
+private fun Magnifier(
+    center: OffsetDateTime,
+    items: List<TimelineItem>,
+    onMove: (Long) -> Unit,
+) {
+    val spanMin = 90f
+    Canvas(
+        Modifier.fillMaxWidth().height(84.dp)
+            .pointerInput(center) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    val minutes = (-drag.x / size.width.toFloat() * spanMin).toLong()
+                    if (minutes != 0L) onMove(minutes)
+                }
+            },
+    ) {
+        val midY = size.height * 0.60f
+        drawLine(LINE_COLOR, Offset(0f, midY), Offset(size.width, midY), 2.dp.toPx())
+        fun xOf(t: OffsetDateTime): Float {
+            val dMin = java.time.Duration.between(center, t).toMinutes().toFloat()
+            return size.width / 2f + (dMin / spanMin) * size.width
+        }
+        var tick = center.minusMinutes(45).withSecond(0).withNano(0)
+        tick = tick.withMinute((tick.minute / 15) * 15)
+        repeat(9) {
+            val x = xOf(tick)
+            if (x >= 0f && x <= size.width) {
+                val onTheHour = tick.minute == 0
+                drawLine(
+                    if (onTheHour) HEADER_COLOR else LINE_COLOR,
+                    Offset(x, midY),
+                    Offset(x, midY + (if (onTheHour) 9.dp.toPx() else 5.dp.toPx())),
+                    1.5f.dp.toPx(),
+                )
+            }
+            tick = tick.plusMinutes(15)
+        }
+        items.forEach { item ->
+            val x = xOf(item.time)
+            if (x < 0f || x > size.width) return@forEach
+            val color = if (item.flagId != null) Color(0xFFFF8080) else Color.White
+            val path = Path().apply {
+                moveTo(x, midY - 3.dp.toPx())
+                lineTo(x - 4.dp.toPx(), midY - 12.dp.toPx())
+                lineTo(x + 4.dp.toPx(), midY - 12.dp.toPx())
+                close()
+            }
+            drawPath(path, color)
+        }
+        val cx = size.width / 2f
+        drawLine(ACCENT, Offset(cx, midY - 20.dp.toPx()), Offset(cx, midY + 12.dp.toPx()), 2.dp.toPx())
     }
 }
