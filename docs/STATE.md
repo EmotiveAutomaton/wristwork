@@ -1,5 +1,88 @@
 # STATE — where each phase stands
 
+## Status, 2026-08-28
+
+**Where it stands.** Collection is running on its own and has been for four days. The watch
+records eleven kinds of thing, the server keeps every one of them forever, the detector watches
+for unusual moments and asks about them, and the watch's own ECG now produces true beat-to-beat
+heart data — the thing that was supposed to be impossible without buying a chest strap. What the
+project does not yet have is *labels*, and that is now the only thing standing between here and a
+model. Everything below is either running, or waiting on time passing.
+
+### What is running, and how fresh it was when this was written
+
+Each row is a stream of data. "Freshness" is how long ago the newest entry arrived.
+
+| stream | what it carries | freshness |
+|---|---|---|
+| physiology from the wrist | heart rate every 2 s, skin temperature, on-wrist detection, ambient light, air pressure, steps, distance, floors, elevation, energy, awake/asleep/exercising | under a minute |
+| workstation | processor, graphics, memory, temperatures | 2 minutes |
+| prompts | the questions the watch asks | last one 10 hours ago |
+| labels | what was answered | 6 minutes |
+| detector | scores every five minutes of the day against your own past week | 17 minutes |
+| the archive | every stream above, appended forever, on the server | 3,002 lines |
+
+### What has been collected so far
+
+| thing | count | note |
+|---|---|---|
+| five-minute windows scored | 1,139 | since 24 August |
+| labelled moments | 11 | across 16 rows, because revisions are kept too |
+| labels from a detector question | 2 | the stream that will train the model |
+| labels from a random question | **0** | the stream that will TEST it — the clock has not started |
+| ECG readings | 4 | 30 seconds each, 7,500 samples, real voltage |
+| readings turned into true beat intervals | 3 | one rejected as contact noise, on purpose |
+| nights of overnight variability and sleep | 14 | pulled from the health account |
+| times the detector has asked on its own | 2 | plus one delivery test |
+
+Two beat-to-beat measurements taken half an hour apart read 43.5 ms and 75.1 ms — a near doubling
+that the ordinary heart-rate stream could not have seen at all. That difference is the kind of
+thing this whole apparatus exists to explain.
+
+### What is not yet true
+
+- **The evaluation stream is empty.** Every claim the detector will eventually make about itself
+  has to be scored against questions asked at random times, and none have been answered yet: the
+  first few were never delivered because of a fault fixed yesterday. Until that stream fills,
+  nothing can be said about whether the detector beats chance.
+- **Nothing is being learned yet.** The detector ranks strangeness; it does not classify. No model
+  exists and none should until there are labels to fit one to.
+- **Battery cost is unmeasured.** It needs a stretch of ordinary wear-days to attribute.
+- **The autostart for the workstation's temperature reader has never actually fired.** It waits for
+  the next sign-in. If it fails, processor temperature quietly disappears and the overheating alarm
+  can never fire.
+- **About twenty duplicated overnight rows** are in the archive from a fault fixed yesterday.
+  Harmless and identical; the analysis will collapse them.
+- **Breathing rate** has no working name in the health interface. Four spellings were rejected and
+  there is no way to list the valid ones. It is the least important of the set.
+
+### Rough ETAs
+
+"What moves it" is the single lever that would bring the date forward.
+
+| milestone | what has to happen | rough date | what moves it |
+|---|---|---|---|
+| the health connection expires | nothing — it just lapses | **4 September** | one toggle: publish the consent screen |
+| a battery figure | seven ordinary wear-days | ~5 September | wearing it |
+| 50 training labels | detector questions answered at ~2–3/day | ~13 September | the daily question budget |
+| enough ECG readings to calibrate | ~30 good readings across different states | ~12 September | pressing the button beside labels |
+| 100 training labels — the structure audit | same rate continues | early October | the daily question budget |
+| 50 random-stream labels — the first honest test | one random question a day, answered | **early November** | raising the random budget is the ONLY lever |
+| a model that shows a state on the wrist | must first beat a time-of-day baseline on random-stream labels | not before November | everything above |
+
+**The one number worth arguing about** is the last row's lever. At one random question a day, the
+first honest measurement of whether any of this works lands in November. At two a day it lands in
+early October. It is a burden question, not a technical one, which is why it is yours.
+
+### Waiting on you
+
+1. **Publish the consent screen** in the cloud console so the health connection stops expiring
+   weekly. Until then it dies on 4 September and the ECG, sleep and overnight data stop arriving.
+2. **Decide the random question budget** — one a day or two. It is the only thing that moves the
+   November date.
+3. **Press the ECG button beside labels** when you can. Every reading is a piece of ground truth,
+   and they are the scarcest useful thing after labels themselves.
+
 Updated 2026-08-23.
 
 | Phase | Status | Notes |
