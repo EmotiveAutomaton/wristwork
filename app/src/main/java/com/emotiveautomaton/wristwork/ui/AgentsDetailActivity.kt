@@ -63,6 +63,7 @@ class AgentsDetailActivity : ComponentActivity() {
                         // and no ack was ever posted (found 2026-08-26 when the round trip was
                         // finally tested rather than inferred).
                         .url(NtfyClient.baseUrl + "/" + BuildConfig.TOPIC_ACKS)
+                        .header("Priority", "min")          // an ack is bookkeeping, not news
                         .post(okhttp3.RequestBody.create(null, "ack"))
                         .build()
                 ).execute().close()

@@ -41,6 +41,13 @@ class DrainWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
     private fun post(topic: String, body: String): Boolean = runCatching {
         NtfyClient.http.newCall(
             Request.Builder().url("${NtfyClient.baseUrl}/$topic")
+                // SILENT, always. Everything the watch uploads is an archive write, not news:
+                // labels, caught notifications, physiology batches, spoken notes. Posting at the
+                // bus default made the server push a notification back for every one of them —
+                // so submitting a label buzzed the wrist that had just submitted it (2026-08-30).
+                // Every server-side publisher already sets this; the watch was the one that did
+                // not. Consumers poll the topics, so priority changes delivery, never storage.
+                .header("Priority", "min")
                 .post(body.toRequestBody("application/json".toMediaType()))
                 .build()
         ).execute().use {
