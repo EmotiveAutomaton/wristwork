@@ -41,6 +41,9 @@ android {
         buildConfigField("String", "TOPIC_FLAGS", "\"${cfg("TOPIC_FLAGS")}\"")
         buildConfigField("String", "TOPIC_HEALTH", "\"${cfg("TOPIC_HEALTH")}\"")
         buildConfigField("String", "TOPIC_PROMPTS", "\"${cfg("TOPIC_PROMPTS")}\"")
+        // The voice-to-print loop with Fetch: the wrist speaks on one, is answered on the other.
+        buildConfigField("String", "TOPIC_REQUESTS", "\"${cfg("TOPIC_REQUESTS")}\"")
+        buildConfigField("String", "TOPIC_PROPOSALS", "\"${cfg("TOPIC_PROPOSALS")}\"")
         buildConfigField("int", "CUE_DELAY_MIN", cfg("CUE_DELAY_MIN").ifEmpty { "30" })
     }
 

@@ -1,8 +1,11 @@
 package com.emotiveautomaton.wristwork.ui
 
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -14,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,9 +34,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.wear.compose.material.Button
 import androidx.wear.compose.material.Text
 import com.emotiveautomaton.wristwork.BuildConfig
+import com.emotiveautomaton.wristwork.data.SpokenNote
 import com.emotiveautomaton.wristwork.net.NtfyClient
+import com.emotiveautomaton.wristwork.net.PrintLoop
 import com.emotiveautomaton.wristwork.net.PrusaClient
 import okhttp3.Request
 import java.time.Instant
@@ -77,6 +84,38 @@ private data class PrintRecord(
  */
 class PrinterDetailActivity : ComponentActivity() {
 
+    /** The last spoken print request, held only while this frame is on screen. */
+    private var heard by mutableStateOf<String?>(null)
+    private var sending by mutableStateOf(false)
+
+    /**
+     * Speaking a print request. The button moved here from the workstation frame (2026-08-31)
+     * because this is the frame a person is looking at when they think "I need a thing" — and
+     * because the answer comes back to a screen one tap away from this one.
+     *
+     * NO AUDIO IS RECORDED OR KEPT. The platform recogniser hears the speech and returns words;
+     * the words go two places and the sound goes nowhere. The two places are deliberate: the
+     * sibling project Fetch, which turns the sentence into candidate models, and our own
+     * append-only record, so that what was asked for survives independently of whether anything
+     * was ever printed.
+     */
+    private val speech = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { r ->
+        if (r.resultCode != RESULT_OK) return@registerForActivityResult
+        val text = r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            ?.takeIf { it.isNotBlank() } ?: return@registerForActivityResult
+        heard = text
+        sending = true
+        SpokenNote.file(applicationContext, text, "printer")
+        Thread {
+            val ok = PrintLoop.speak(text)
+            sending = false
+            if (ok) startActivity(Intent(this, PrintChooserActivity::class.java))
+            else heard = "could not reach the bus"
+        }.start()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -85,6 +124,11 @@ class PrinterDetailActivity : ComponentActivity() {
                 var thumb by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
                 var status by remember { mutableStateOf("loading…") }
                 var record by remember { mutableStateOf<PrintRecord?>(null) }
+                // Fetch asks the wrist questions — which of these three, and then really print
+                // this? If the frame gives no way to notice, the loop stalls in silence and the
+                // offer expires unanswered. So the question gets a door, here, where the person
+                // already is.
+                var waiting by remember { mutableStateOf<PrintLoop.Proposal?>(null) }
                 LaunchedEffect(Unit) {
                     var lastThumbPath: String? = null
                     var lastRecordThumb: String? = null
@@ -130,6 +174,7 @@ class PrinterDetailActivity : ComponentActivity() {
                                 } else if (r?.name == null) thumb = null
                             }
                         }
+                        withContext(Dispatchers.IO) { waiting = PrintLoop.latest() }
                         delay(5_000)
                     }
                 }
@@ -181,6 +226,40 @@ class PrinterDetailActivity : ComponentActivity() {
                         }
                     }
                     if (v?.active != true) record?.let { r -> RecordFrame(r, thumb) }
+                    waiting?.let { w ->
+                        Spacer(Modifier.height(12.dp))
+                        Button(
+                            onClick = { startActivity(Intent(this@PrinterDetailActivity,
+                                PrintChooserActivity::class.java)) },
+                            modifier = Modifier.size(width = 140.dp, height = 34.dp),
+                        ) {
+                            Text(
+                                when (w) {
+                                    is PrintLoop.Proposal.Shortlist -> "pick one of ${w.candidates.size}"
+                                    is PrintLoop.Proposal.Confirm -> "print this?"
+                                    is PrintLoop.Proposal.Said -> "fetch said something"
+                                },
+                                fontSize = 11.sp, color = ACCENT,
+                            )
+                        }
+                    }
+                    // Say what you want printed. Everything past this point happens off the wrist.
+                    Spacer(Modifier.height(14.dp))
+                    Button(
+                        onClick = {
+                            speech.launch(
+                                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).putExtra(
+                                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                                )
+                            )
+                        },
+                        modifier = Modifier.size(width = 130.dp, height = 34.dp),
+                    ) { Text(if (sending) "sending…" else "print something", fontSize = 11.sp) }
+                    heard?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text("“$it”", fontSize = 11.sp, color = Color.White)
+                    }
                     Spacer(Modifier.height(70.dp))
                 }
             }

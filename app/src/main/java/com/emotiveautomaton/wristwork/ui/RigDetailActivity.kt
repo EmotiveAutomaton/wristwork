@@ -71,9 +71,8 @@ private val HEADER_COLOR = Color(0xFF9EB8D8)
  */
 class RigDetailActivity : ComponentActivity() {
 
-    /** Last thing said into the frame. Held only for the moment it is on screen — the audio is
-     *  never recorded by us and the text is not stored, queued or posted (owner 2026-08-25: the
-     *  button is a placeholder for future print requests; the back end is deliberately unbuilt). */
+    /** Last thing said into the frame. Held on screen only for the moment; the audio is never
+     *  recorded, and the words are filed to the append-only note record and nowhere else. */
     private var heard by mutableStateOf<String?>(null)
 
     private val speech = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
@@ -141,8 +140,9 @@ class RigDetailActivity : ComponentActivity() {
                     Spacer(Modifier.height(10.dp))
                     if (procs.isNotEmpty()) ProcHeader()
                     procs.forEach { ProcRow(it) }
-                    // Placeholder, wired to nothing on purpose: speak, see the transcript,
-                    // and it is gone. The destination (a print request) is not designed yet.
+                    // A spoken note, kept as text and nothing else. Print requests moved to the
+                    // printer frame (2026-08-31), where the answer comes back; what stays here is
+                    // the plain "say something and have it recorded" the note stream was for.
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = {

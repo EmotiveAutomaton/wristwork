@@ -104,6 +104,13 @@
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault" />
 
+        <!-- Choosing what to print. Fetch publishes candidates and slicer numbers; the choosing
+             is the wrist's, by the owner's ruling, so this screen is the human half of that loop. -->
+        <activity
+            android:name=".ui.PrintChooserActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault" />
+
         <!-- Phase 5: Component B — three instantiations of the generic channel provider. -->
         <service
             android:name=".complication.AgentsComplicationService"
