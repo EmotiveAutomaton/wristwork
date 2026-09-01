@@ -137,6 +137,8 @@ class TagActivity : ComponentActivity() {
         promptTs = intent.getStringExtra(EXTRA_PROMPT_TS)
         promptSource = intent.getStringExtra(EXTRA_PROMPT_SOURCE)
         if (promptTs != null) draftTsEvent = promptTs
+        // ...and if the grid was opened any other way while a question is waiting, adopt it from
+        // the recorded state. See adoptPendingPrompt().
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -148,7 +150,7 @@ class TagActivity : ComponentActivity() {
 
         setContent {
             WristTheme {
-                LaunchedEffect(Unit) { reloadTimeline() }
+                LaunchedEffect(Unit) { adoptPendingPrompt(); reloadTimeline() }
                 Column(
                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp),
@@ -437,7 +439,13 @@ class TagActivity : ComponentActivity() {
             else -> "self"
         }
         val ctx = applicationContext
-        val isNowDraft = base == null && draftTsEvent == null && editingFlagId == null
+        // The face shows the most recent thing known, so a label becomes the face whenever the
+        // moment it describes is at least as recent as what the face already shows. The old test
+        // was "was this a here-and-now label", which excluded every answer to a prompt — so
+        // answering left the face showing a state the person had just replaced. A retro label
+        // placed further back on the timeline still, correctly, does not move it.
+        val eventMs = runCatching { OffsetDateTime.parse(tsEvent).toInstant().toEpochMilli() }
+            .getOrDefault(now.toInstant().toEpochMilli())
         runBlocking(Dispatchers.IO) {
             TagDb.get(ctx).tags().insert(TagEvent(
                 eventId = base?.eventId ?: UUID.randomUUID().toString(),
@@ -452,15 +460,39 @@ class TagActivity : ComponentActivity() {
                 promptId = base?.promptId ?: promptId, promptTs = base?.promptTs ?: promptTs,
                 revises = base?.id,
             ))
-            // Any submission answers a waiting prompt: the face goes back to showing an age.
-            CurrentState.setPromptPending(ctx, false)
-            if (isNowDraft && hasContent) {
-                CurrentState.write(ctx, primary ?: "OTHER", now.toInstant().toEpochMilli(), noticedBefore)
+            // Any submission answers a waiting prompt: the face goes back to showing an age, and
+            // the question is retired so the next grid does not adopt it a second time.
+            CurrentState.clearPrompt(ctx)
+            if (hasContent && eventMs >= (CurrentState.read(ctx).sinceEpochMs ?: 0L)) {
+                CurrentState.write(ctx, primary ?: "OTHER", eventMs, noticedBefore)
             }
         }
         StateComplicationService.requestUpdate(ctx)
         DrainWorker.enqueue(ctx)
         dirty = false
+    }
+
+    /**
+     * Take up a waiting question however the grid was opened.
+     *
+     * The face says NEW; tapping the face used to open a grid that knew nothing about the
+     * question — no marker on the line, and worse, an answer recorded as self-initiated rather
+     * than as the answer to a randomly-timed question, which quietly removes it from the only
+     * data that can ever measure whether the detector beats chance. Owner, 2026-09-01: the
+     * notification is an imperfect way of creating those events.
+     *
+     * The notification's own extras still win when it was the door used, because they are the
+     * same values and arrive earlier.
+     */
+    private suspend fun adoptPendingPrompt() {
+        if (promptId != null || editingFlagId != null) return
+        val held = withContext(Dispatchers.IO) { CurrentState.read(applicationContext) }
+        if (!held.promptPending) return
+        promptId = held.promptId
+        promptTs = held.promptTs
+        promptSource = held.promptSource
+        // Only move the draft moment if the person has not already placed one themselves.
+        if (draftTsEvent == null) draftTsEvent = held.promptTs
     }
 
     private suspend fun reloadTimeline() {
@@ -477,7 +509,7 @@ class TagActivity : ComponentActivity() {
             // prompt always shows WHERE on the line the question points (owner 2026-08-28:
             // "there should pretty much always be a visible triangle near the current time").
             // Without it the line looks empty until the first label lands on it.
-            val asked = draftTsEvent
+            val asked = (draftTsEvent ?: promptTs)
                 ?.let { runCatching { OffsetDateTime.parse(it) }.getOrNull() }
                 ?.takeIf { t -> events.none { it.time == t } }
                 ?.let { listOf(TimelineItem(it, null, null)) }

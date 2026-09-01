@@ -72,12 +72,30 @@ class PromptWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             // Stale prompts are dropped rather than asked late: an hour-old "how are you right
             // now" is a worse question than no question, and a skipped random prompt is honestly
             // a skipped random prompt rather than a mistimed answer in the evaluation set.
-            if (now - deliverAt > STALE_AFTER_S) { fired += id; continue }
+            if (now - deliverAt > STALE_AFTER_S) {
+                fired += id
+                // If THIS is the question the face is still advertising, retire it: a marker that
+                // outlives the question it stands for is worse than no marker.
+                runCatching {
+                    val held = com.emotiveautomaton.wristwork.data.CurrentState.read(ctx)
+                    if (held.promptId == id) {
+                        com.emotiveautomaton.wristwork.data.CurrentState.clearPrompt(ctx)
+                        com.emotiveautomaton.wristwork.complication.StateComplicationService
+                            .requestUpdate(ctx)
+                    }
+                }
+                continue
+            }
             val aboutS = p["ts"]?.jsonPrimitive?.content?.toLongOrNull() ?: deliverAt
             notify(ctx, id, source, aboutS)
-            // The face carries it too, not just the notification (owner 2026-08-28).
+            // The question is RECORDED, not merely announced (owner 2026-09-01). The notification
+            // is one door to it; the face is another, and the grid opened from either must know
+            // the same thing — which moment is being asked about, and which question it answers.
             runCatching {
-                com.emotiveautomaton.wristwork.data.CurrentState.setPromptPending(ctx, true)
+                com.emotiveautomaton.wristwork.data.CurrentState.setPrompt(
+                    ctx, id, source,
+                    Instant.ofEpochSecond(aboutS).atZone(ZoneId.systemDefault())
+                        .format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
                 com.emotiveautomaton.wristwork.complication.StateComplicationService.requestUpdate(ctx)
             }
             fired += id

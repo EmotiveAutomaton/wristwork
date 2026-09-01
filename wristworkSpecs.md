@@ -327,6 +327,20 @@ nothing else. Verified end to end except speaking aloud: a request published by 
 produced a real shortlist from Fetch's catalogue search, and a decline in the watch's exact shape
 was accepted by Fetch's own handler.
 
+**2026-09-01 — the waiting question is recorded, not merely announced.** The question's identity
+and the moment it asked about lived only inside the notification's tap action, so the notification
+was the only door that led to a correct answer. Opening the grid from the face gave a timeline with
+no marker on it, and — far worse — filed the answer as self-initiated, which silently removed it
+from the evaluation stream that is the only thing able to measure whether the detector beats
+chance. Owner: "the notifications are an imperfect way of creating those events." The pending
+question is now held in the same place the face reads, so any way into the grid adopts it: the
+triangle stands on the line from the moment NEW appears, and an unanswered marker is a legitimate
+state. A question that goes stale unanswered retires itself rather than leaving a marker that
+outlives it. Consequent fix: the face now follows any label whose moment is at least as recent as
+what it already shows, which includes every answer to a prompt — the old test excluded them, so
+answering left the face showing a state the person had just replaced. A retro label placed further
+back still does not move it.
+
 ---
 
 # telltale — original build runbook (historical)
