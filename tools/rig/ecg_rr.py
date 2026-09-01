@@ -25,6 +25,9 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 STATE = os.path.join(ROOT, "data", "ecg-rr-state.json")
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stream_cache                                                    # noqa: E402
+
 _spec = importlib.util.spec_from_file_location(
     "health_pull", os.path.join(ROOT, "tools", "rig", "health_pull.py"))
 hp = importlib.util.module_from_spec(_spec)
@@ -34,7 +37,7 @@ _spec.loader.exec_module(hp)
 def gather(cfg):
     """Reassemble whole readings from the chunked records on the bus, newest window first."""
     readings = {}
-    for msg in hp_fetch(cfg, cfg.get("TOPIC_HEALTH", "health"), "720h"):
+    for _, msg in stream_cache.rows(cfg, cfg.get("TOPIC_HEALTH", "health"), 30):
         if msg.get("kind") != "ecg":
             continue
         point = msg.get("point") or {}

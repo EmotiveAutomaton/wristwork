@@ -38,6 +38,9 @@ import sys
 import time
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stream_cache                                                    # noqa: E402
+
 SCORER_VERSION = "v1-2026-08-28"
 EPOCH_MIN = 5              # epoch length
 BASELINE_DAYS = 7          # how far back the time-of-day baseline reaches
@@ -255,7 +258,7 @@ def label_times(cfg):
     uninteresting, and without this the thing feeds on its own tail."""
     out = []
     try:
-        for _, payload in fetch(cfg, cfg.get("TOPIC_TAGS", "tags"), "48h"):
+        for _, payload in stream_cache.rows(cfg, cfg.get("TOPIC_TAGS", "tags"), 2):
             ts = payload.get("ts_entered")
             if not ts:
                 continue
@@ -294,8 +297,10 @@ def main():
     asks_path = os.path.join(ROOT, "data", "detector-asks.jsonl")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
-    buckets = epochs_from(fetch(cfg, cfg.get("TOPIC_HEALTH", "health"),
-                                "%dh" % (BASELINE_DAYS * 24)))
+    # Through the local rolling copy, not straight off the bus: pulling seven days of physiology
+    # every fifteen minutes exhausted the server's daily read allowance, after which it answered
+    # 200 and cut the response short — silently costing five hours of scoring on 2026-08-31.
+    buckets = epochs_from(stream_cache.rows(cfg, cfg.get("TOPIC_HEALTH", "health"), BASELINE_DAYS))
     if not buckets:
         print("no health data in window")
         return

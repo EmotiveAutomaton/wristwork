@@ -28,3 +28,7 @@ captures/
 # raw label mirrors and local data at the repo root — never committed (privacy law)
 /data/
 tools/watch/.last-watch-ip
+
+# compiled Python: churns on every scheduled run, carries no information
+__pycache__/
+*.pyc

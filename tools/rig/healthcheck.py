@@ -15,8 +15,12 @@ import sys
 import time
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stream_cache                                                    # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 FAILURES = []
+TRUNCATED = []      # topics where the server stopped answering part-way through
 
 
 def config():
@@ -52,7 +56,32 @@ def fetch(cfg, topic, since):
                 o = json.loads(line)
             except Exception:
                 continue
+            # The server signals "I stopped early" as an ordinary line inside a 200 response —
+            # a daily read allowance, a rate limit. Dropping it as unparseable is how a health
+            # check reports green while every reader is quietly seeing a partial stream
+            # (2026-08-31). A check that cannot see its own blindfold is worse than none.
+            if o.get("http") and o.get("error"):
+                TRUNCATED.append("%s: %s" % (topic, o.get("error")))
+                break
             if o.get("event") == "message":
+                out.append(o)
+    return out
+
+
+def cached(cfg, topic, days):
+    """The local rolling copy, in the same envelope shape `fetch` returns."""
+    path, _ = stream_cache._paths(topic)
+    stream_cache.refresh(cfg, topic, days)
+    out, cutoff = [], time.time() - days * 86400
+    if not os.path.exists(path):
+        return out
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                o = json.loads(line)
+            except Exception:
+                continue
+            if o.get("event") == "message" and o["time"] >= cutoff:
                 out.append(o)
     return out
 
@@ -91,7 +120,11 @@ def main():
     ):
         topic = cfg.get(topic_key)
         try:
-            msgs = fetch(cfg, topic, "48h")
+            # The physiology stream is by far the largest thing on the bus; asking for two days of
+            # it twice per check is what a read allowance is spent on. Everything else is small
+            # enough to ask the server directly.
+            msgs = (cached(cfg, topic, 2) if topic_key == "TOPIC_HEALTH"
+                    else fetch(cfg, topic, "48h"))
         except Exception as e:
             say(False, label, "fetch failed: %s" % e)
             continue
@@ -104,7 +137,8 @@ def main():
 
     # --- what the physiology stream actually contains ---
     try:
-        msgs = fetch(cfg, cfg["TOPIC_HEALTH"], "6h")
+        msgs = [m for m in cached(cfg, cfg["TOPIC_HEALTH"], 2)
+                if m["time"] > time.time() - 6 * 3600]
         kinds = {}
         for m in msgs:
             try:
@@ -169,6 +203,12 @@ def main():
     say(bool(cfg.get("GHEALTH_REFRESH_TOKEN")), "ECG / sleep / overnight HRV",
         "authorised" if cfg.get("GHEALTH_REFRESH_TOKEN")
         else "NOT authorised yet — python tools/rig/health_pull.py --auth")
+
+    # Reported last and on its own, because it invalidates everything above it: a truncated read
+    # makes every count in this report a lower bound rather than a measurement.
+    say(not TRUNCATED, "bus served whole answers",
+        "yes" if not TRUNCATED else "NO — %s. Every count above is a floor, not a figure."
+        % "; ".join(sorted(set(TRUNCATED))))
 
     print()
     if FAILURES:
