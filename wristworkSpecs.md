@@ -298,6 +298,35 @@ the owner: "comfortably survives a full wear-day" — the <3%/day figure is diso
 report attribution during H1. Printer face is always visible (2026-08-24; it was invisible while idle until then). State face currently shows the state code alone; tap opens the 2x4 tag grid
 (SEEK RAGE / FEAR LUST / CARE GRIEF / PLAY OTHER + "already noticed?" toggle + optional mic note).
 
+**2026-08-31 — the watch stops notifying itself.** Every server-side publisher already posted at
+silent priority; the watch's own uploader did not, so the bus pushed a notification back for each
+label, caught flag, physiology batch and spoken note. Submitting a label buzzed the wrist that had
+just submitted it. All watch uploads are now silent by construction. Owner-reported, fixed and
+verified on-device (priority 3 before the install, 1 after, same code path as labels).
+
+**2026-08-31 — the bus enforces a daily read allowance, and silence looked like calm again.** Past
+the limit the server answers 200 and then cuts the response short with a limit line as its final
+row, so every reader saw a partial stream and nothing raised. The detector scored zero new epochs
+because the newest hours were exactly the part cut away, and its scheduled task exited successfully:
+five hours of scoring lost. Cause was ours — seven days of physiology re-read every fifteen minutes
+plus thirty days every hour, roughly 800 MB a day against a 500 MB allowance. Both heavy readers now
+work from a local rolling copy and ask the bus only for what is new (about 1 MB a day), seeded from
+the nightly mirror. The truncation line is detected everywhere it can appear, and the health check
+reports it last and says plainly that it makes every count above it a floor rather than a figure.
+
+**2026-08-31 — voice to print, the wrist half.** The microphone moved from the workstation frame to
+the printer frame. A spoken sentence goes to the sibling project Fetch as a print request and to our
+own append-only note record; no audio is recorded or kept. Fetch searches, licence-filters, and
+slices only the model that gets picked — and deliberately renders no chooser, because the owner
+ruled the choosing belongs on the wrist. That chooser now exists: two questions in order (which of
+these, then really this one), the listing's own photograph, real weight and print time from the
+slicer, a visible deadline because silence is a valid answer, and the bed warning in red — a
+finished job and a cleared plate are indistinguishable to the printer, and Fetch refuses to start
+until a human has returned it to idle. Bus grants: the watch may write requests and read proposals,
+nothing else. Verified end to end except speaking aloud: a request published by the watch account
+produced a real shortlist from Fetch's catalogue search, and a decline in the watch's exact shape
+was accepted by Fetch's own handler.
+
 ---
 
 # telltale — original build runbook (historical)

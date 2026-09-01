@@ -1,5 +1,94 @@
 # STATE — where each phase stands
 
+## Status, 2026-08-31
+
+**What was asked.** Check the watch is working and the emotion face is really recording; fix the
+notification that fires after recording; and look at how the sibling project handles a spoken
+request from the printer screen, so the two halves line up.
+
+**All three are done, and a fourth thing turned up on the way that was worse than any of them:
+the message bus had quietly stopped serving whole answers, and the detector had been scoring
+nothing for five hours while reporting success.**
+
+### The emotion face is recording, verified to the archive
+
+| check | result |
+|---|---|
+| answers reaching the bus | newest 3.5 hours before this was written |
+| answers reaching the permanent archive on the server | 27 rows |
+| distinct labelled moments | 17, plus 5 revisions kept beside the originals |
+| answers to a randomly timed question | 1 — the evaluation clock has started |
+| everything else | twelve checks, all green |
+
+### The notification after recording — fixed
+
+Every publisher on the server side already marked its messages silent. The watch's own uploader
+marked nothing, so the bus treated an upload as news and pushed a notification back — for labels,
+for caught notifications, for physiology batches, for spoken notes. Labels were just the one you
+noticed, because it is the only one you are looking at the screen for.
+
+Verified on the watch, not inferred: messages sent three minutes before the install carried the
+ordinary delivery setting; messages sent five minutes after it carried the silent one. Same code
+path as a label.
+
+### The failure that was not reported: the bus stopped serving whole answers
+
+The server enforces a daily limit on how much can be read from it. Past that limit it does not
+refuse — it says yes, sends part of the answer, and appends a line saying it stopped. Nothing
+treated that as an error, so every reader saw a short stream and believed it complete. The
+detector scored nothing new because the missing part was the most recent hours, and its scheduled
+job exited reporting success. Five hours of scoring were lost, and the same thing would have
+happened every day, earlier each day.
+
+The cause was ours: the detector re-read seven days of physiology every fifteen minutes and the
+heartbeat job re-read thirty days every hour — roughly 800 MB a day against a 500 MB allowance.
+Both now keep a local copy and ask the server only for what is new, about 1 MB a day. The
+truncation line is detected everywhere it can appear, and the health check now reports it last
+and says plainly that it makes every other count on the page a floor rather than a figure.
+
+### Speaking a print into existence — the watch half now exists
+
+The sibling project searches the model catalogue, filters by licence, and slices only the model
+that gets picked. It deliberately builds no chooser, because the choosing was ruled to belong on
+the wrist — so its loop had nowhere to land. It does now.
+
+- **The microphone moved to the printer screen**, where a person is standing when they think of a
+  thing they want, and where the answer comes back. No audio is recorded or kept anywhere: the
+  words go to the sibling project as a request and to our own permanent record, and the sound goes
+  nowhere.
+- **A chooser asks two questions in order** — which of these, and then really this one — with the
+  listing's own photograph, the real weight and print time from the slicer, a visible deadline
+  because doing nothing is a valid answer, and the bed warning in red.
+- **The bed warning is not decoration.** A finished job and a cleared plate look identical to the
+  printer; there is no way to ask. A print started onto a plate that still holds the last part
+  drives the nozzle into it, so it refuses until a person has cleared the plate.
+- **The bus now lets the watch speak on one channel and listen on the other, and nothing else.**
+
+Verified end to end on the real bus with the real accounts: a request published by the watch's own
+account produced a genuine shortlist from a live catalogue search, its photograph loads on the
+watch, and a refusal in the watch's exact wording was accepted by the sibling project's own
+handler. Both screens were photographed on the watch rendering real payloads.
+
+### What is still not true
+
+- **Speaking aloud is the one untested step.** It needs a voice, which I do not have. Everything
+  either side of it is proven.
+- **The listing photographs are large** — nearly half a megabyte for the one tested. It loads, but
+  off home Wi-Fi it will be slow.
+- **The temperature reader on the workstation has still never started on its own.** It waits for
+  the next sign-in; if it fails, processor temperature disappears and the overheat alarm can never
+  fire.
+- **The health connection lapses on 4 September** unless the consent screen is published.
+- Roughly twenty duplicated overnight rows remain in the archive from a fault fixed on the 30th.
+
+### Waiting on you
+
+1. **Say something into the printer screen** — tap "print something", say what you want, and see
+   whether candidates come back. That is the last untested step.
+2. **Publish the consent screen** so the health connection stops expiring weekly.
+3. **Decide the random question budget** — one a day or two. It is still the only thing that moves
+   the first honest test from November to early October.
+
 ## Status, 2026-08-28
 
 **Where it stands.** Collection is running on its own and has been for four days. The watch
