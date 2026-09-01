@@ -36,6 +36,9 @@ CACHE_DIR = os.path.join(ROOT, "data")
 # Keep a little more than any caller asks for, so a window boundary never trims live data.
 PRUNE_MARGIN_H = 6
 
+# topic -> the nightly mirror that holds the same envelopes, where the names differ.
+MIRROR_NAMES = {"tags": "labels"}
+
 
 class BusTruncated(RuntimeError):
     """The server stopped mid-answer. Callers must not treat the partial result as complete."""
@@ -126,7 +129,9 @@ def _seed_from_mirror(topic, path):
     The mirror holds the same raw envelope lines the bus would send, so a first run costs nothing
     against the read allowance — which matters most on exactly the day the allowance ran out.
     """
-    mirror = os.path.join(CACHE_DIR, "%s.jsonl" % topic)
+    # The nightly mirror files are named for what they hold, not for the topic they came from:
+    # the label stream arrives on a topic called tags and is mirrored as labels.jsonl.
+    mirror = os.path.join(CACHE_DIR, "%s.jsonl" % MIRROR_NAMES.get(topic, topic))
     if not os.path.exists(mirror):
         return 0
     n = 0

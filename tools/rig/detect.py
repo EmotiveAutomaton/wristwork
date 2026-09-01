@@ -41,7 +41,7 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import stream_cache                                                    # noqa: E402
 
-SCORER_VERSION = "v1-2026-08-28"
+SCORER_VERSION = "v2-2026-09-01"   # light and pressure no longer select moments
 EPOCH_MIN = 5              # epoch length
 BASELINE_DAYS = 7          # how far back the time-of-day baseline reaches
 TOD_BUCKET_MIN = 120       # baseline matches epochs from the same 2-hour slot of the day
@@ -52,7 +52,17 @@ FLOOR_Z = 2.0                 # never ask about a moment that is not at least th
 INTERACTION_QUIET_MIN = 12    # minutes around a label entry that are ours, not the wearer's
 
 # Recorded and available to the rules, but never z-scored: see the note in features().
-NOT_SCORED = {"calories_sum"}
+#
+# LIGHT AND PRESSURE JOINED THIS SET ON 2026-09-01, and the reason is the most important thing in
+# this file. An audit of the first fourteen questions the detector asked found EIGHT of them were
+# fired by the ambient light sensor, with z-scores of 77, 55, 30, 20, 13 and 12 -- walking
+# outdoors, or a lamp coming on at 05:47 against a night-time baseline whose spread is nearly
+# zero. Barometric pressure fired a ninth. Neither is physiology: they describe the room, not the
+# person. Left in the firing rule they select the training set on illumination, which quietly
+# turns the whole collection into a study of when the lights change. They stay in the raw stream
+# and remain available to a model as CONTEXT -- knowing it was dark matters when interpreting a
+# state -- but they may never again decide which moment is worth interrupting someone for.
+NOT_SCORED = {"calories_sum", "light", "light_sd", "pressure", "pressure_sd"}
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -171,7 +181,12 @@ def usable(bucket):
     off = bucket.get("offbody", [])
     if off and st.mean(off) < 0.5:
         return False, "offbody"
-    act = bucket.get("activity", [])
+    # Sleep is a STATE that persists, not an event that happens. The activity channel reports
+    # roughly once every forty minutes, so it lands in about one five-minute epoch in eight -- and
+    # this test, reading only the epoch's own bucket, therefore passed almost every sleeping epoch
+    # as usable. Six of the detector's first fourteen questions fired between 02:00 and 08:00
+    # (2026-09-01 audit). The caller carries the last known state forward into `activity_held`.
+    act = bucket.get("activity", []) or bucket.get("activity_held", [])
     if act and act[-1] == "USER_ACTIVITY_ASLEEP":
         return False, "asleep"
     return True, None
@@ -305,6 +320,17 @@ def main():
         print("no health data in window")
         return
 
+    # Carry the activity state forward: the watch reports it far too rarely for a five-minute
+    # epoch to contain one, and a guard that only knows the state one epoch in eight is off seven
+    # eighths of the time.
+    held = None
+    for start in sorted(buckets):
+        seen = buckets[start].get("activity")
+        if seen:
+            held = seen[-1]
+        elif held is not None:
+            buckets[start]["activity_held"] = [held]
+
     # Feature table for every epoch, then a time-of-day matched baseline per feature.
     table = {}
     for start, bucket in sorted(buckets.items()):
@@ -330,7 +356,8 @@ def main():
 
     now = time.time()
     written = 0
-    scored = []          # (epoch, peak) for everything written this pass
+    scored = []
+    zs_by_epoch = {}        # what each epoch's deviations were, so a firing can name its cause          # (epoch, peak) for everything written this pass
     with open(out_path, "a", encoding="utf-8") as fh:
         for start in sorted(table):
             if start in already or start > now - EPOCH_MIN * 60:
@@ -352,6 +379,7 @@ def main():
             if combined is None:
                 continue
             scored.append((start, peak))
+            zs_by_epoch[start] = zs
             fh.write(json.dumps({
                 "epoch": start,
                 "scorer": SCORER_VERSION,
@@ -406,8 +434,14 @@ def main():
     ]
     if not candidates:
         return
-    epoch_center, peak = max(candidates, key=lambda c: c[1])
-    epoch_center += EPOCH_MIN * 30      # the middle of the epoch, not its edge
+    epoch_start, peak = max(candidates, key=lambda c: c[1])
+    epoch_center = epoch_start + EPOCH_MIN * 30      # the middle of the epoch, not its edge
+    # WHICH CHANNEL FIRED THIS, recorded at the time. Reconstructing it after the fact took an
+    # archaeology session and is what exposed the light-sensor problem (2026-09-01); a question
+    # that cannot say what provoked it cannot be audited, and this is the file that must survive
+    # a recompute.
+    zs = zs_by_epoch.get(epoch_start) or {}
+    driver = max(zs.items(), key=lambda kv: abs(kv[1]))[0] if zs else None
     try:
         post_prompt(cfg, epoch_center, now)
     except Exception as exc:
@@ -416,8 +450,12 @@ def main():
     with open(asks_path, "a", encoding="utf-8") as fh:
         fh.write(json.dumps({
             "epoch": int(epoch_center), "scorer": SCORER_VERSION,
+            "prompt_id": "s-%d" % epoch_center,
             "fired": True, "fired_at": int(now), "peak_z": round(peak, 3),
             "threshold": round(threshold, 3),
+            "driver": driver,
+            "driver_z": round(zs[driver], 3) if driver else None,
+            "z": {k: round(v, 2) for k, v in sorted(zs.items(), key=lambda kv: -abs(kv[1]))[:5]},
         }) + "\n")
     print("ASKED about %s (peak z %.2f)" % (time.strftime("%H:%M", time.localtime(epoch_center)), peak))
 
