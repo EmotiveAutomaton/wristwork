@@ -341,6 +341,29 @@ what it already shows, which includes every answer to a prompt — the old test 
 answering left the face showing a state the person had just replaced. A retro label placed further
 back still does not move it.
 
+**2026-09-01 — the collection was selecting its own training set on the wrong signal.** Owner asked
+for a check on anything that might be subverting the future analysis while collection runs. Three
+things were: (1) EIGHT of the detector's first fourteen questions were fired by the ambient light
+sensor and a ninth by barometric pressure — a lamp at 05:47 against a night baseline of nearly zero
+spread scores 30 standard deviations, walking outdoors scores 77 — so the training set was being
+selected on illumination. Both channels are now recorded but never scored, alongside calories;
+after rescoring, heart rate and its variability are the most extreme channel in 78% of epochs and
+skin temperature in 18%, and candidates spread across the day rather than clustering before dawn.
+(2) The do-not-ask-while-asleep guard read only its own five-minute bucket while the activity
+channel reports about every forty minutes, so it was inoperative seven times in eight; sleep is now
+carried forward as the persisting state it is. (3) A question could not say what provoked it; the
+asks record now carries the question id, the responsible channel and the top deviations.
+
+**Label provenance is reconstructed, not remembered.** The owner recalled that nearly every label
+answered a question. The timestamps say otherwise: of 31 rows, 11 name a real question, 3 more
+plausibly answered a delivered-but-unanswered one (the face-opened case, fixed the same day), 9
+predate the prompt system entirely, and 8 have no question anywhere near them. `labels.jsonl` is
+untouched; a derived, versioned provenance file records the reconstruction, its evidence, and the
+delay between the moment described and the answer given (median 25 minutes, six of twenty-eight
+over an hour, worst nine hours). One rule is enforced in code: only a label naming a real random
+question may enter the evaluation set, because a reconstructed guess in the holdout cannot be
+removed later.
+
 ---
 
 # telltale — original build runbook (historical)
