@@ -51,6 +51,19 @@ RECENT_WINDOW_MIN = 25        # only ask about something that happened in the la
 FLOOR_Z = 2.0                 # never ask about a moment that is not at least this far out
 INTERACTION_QUIET_MIN = 12    # minutes around a label entry that are ours, not the wearer's
 
+# No two questions within this of each other, from ANY source. Owner, 2026-09-01: "there were too
+# many flags in a short period... rapid emotional swaps are so rare that this kind of double hit
+# shouldn't even be considered. Keep each notification to a half hour bracket on either side."
+#
+# The detector's own refractory period is 90 minutes and was working -- but it only ever knew
+# about ITS OWN questions. The random questions are allocated a day in advance by a separate job
+# that cannot see what the detector will do, so nothing was enforcing a gap BETWEEN the two
+# streams. On 2026-09-01 the detector asked at 08:37 and a random question landed at 09:02:
+# twenty-five minutes apart, and neither rule was broken. The detector is the half that can still
+# choose, so it is the half that yields -- to questions already asked and to questions already
+# scheduled ahead of it.
+PROMPT_BRACKET_MIN = 30
+
 # Recorded and available to the rules, but never z-scored: see the note in features().
 #
 # LIGHT AND PRESSURE JOINED THIS SET ON 2026-09-01, and the reason is the most important thing in
@@ -265,6 +278,27 @@ def already_fired_today(rows, now):
     return count, last
 
 
+def prompt_times(cfg):
+    """Every moment a question has been, or is about to be, put to the wearer -- from any source.
+
+    Both ends matter. A question already delivered means the wearer was interrupted recently; a
+    question ALLOCATED for a moment still to come means they are about to be. Random prompts are
+    written to the bus up to a day early, so the second case is knowable and must be respected --
+    it is also the one that protects the evaluation stream, because a random question answered in
+    the shadow of a detector question is not a clean sample of an ordinary moment.
+    """
+    out = []
+    try:
+        for _, p in stream_cache.rows(cfg, cfg.get("TOPIC_PROMPTS", "prompts"), 3):
+            for key in ("ts", "deliver_at"):
+                v = p.get(key)
+                if isinstance(v, (int, float)):
+                    out.append(float(v))
+    except Exception:
+        pass
+    return out
+
+
 def label_times(cfg):
     """When labels were ENTERED, so the detector never asks about a moment it created itself.
 
@@ -426,11 +460,19 @@ def main():
     if fired_today >= per_day or (last_fire and now - last_fire < refractory):
         return
     entered = label_times(cfg)
+    asked = prompt_times(cfg)
+    # Yield outright if a question is already due within the bracket: a random prompt allocated
+    # for 09:02 owns 08:32 through 09:32, and the detector simply does not speak in that window.
+    if any(abs(now - t) < PROMPT_BRACKET_MIN * 60 for t in asked):
+        print("holding: another question is within %d min of now" % PROMPT_BRACKET_MIN)
+        return
     candidates = [
         (e, pk) for e, pk in scored
         if pk >= threshold
         and now - e <= RECENT_WINDOW_MIN * 60
         and not any(abs(e - t) < INTERACTION_QUIET_MIN * 60 for t in entered)
+        # ...and never about a moment another question already covers, on either side of it.
+        and not any(abs(e - t) < PROMPT_BRACKET_MIN * 60 for t in asked)
     ]
     if not candidates:
         return

@@ -79,10 +79,17 @@ private data class TimelineItem(
 /**
  * The state editor.
  *
- * Interaction (owner, 2026-08-24, extended 2026-08-28). Nothing commits on tap: LONG-PRESS a
- * state sets the primary, TAP toggles a secondary, BACK saves whatever is dirty. Selecting a
- * timeline event saves the current edit and loads that one, so the whole six-hour window stays
- * editable.
+ * Interaction (owner, 2026-08-24, extended 2026-08-28 and 2026-09-01). LONG-PRESS a state sets
+ * the primary, TAP toggles a secondary — and NOTHING is recorded until CONFIRM is pressed, or the
+ * ECG button, which confirms and then takes a reading. Back discards. Selecting a different
+ * timeline event discards too, so the whole six-hour window stays editable without any exit
+ * quietly committing.
+ *
+ * The confirmation gate exists because this face opens by accident (owner, 2026-09-01: "due to
+ * the possibility for mispresses, the watch itself is recording false information today"). A
+ * missing label costs one row. A false label is indistinguishable from a true one forever, and
+ * every model fitted afterwards inherits it — so the asymmetry is not close, and the cost of an
+ * extra press is worth paying on every single entry.
  *
  * The sliders are gone (owner, 2026-08-28) and their meaning moved into the grid itself — less to
  * operate, and the owner's argument is that a forced 1-to-5 invents precision that was never felt:
@@ -143,7 +150,11 @@ class TagActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (scrubAt != null) { scrubAt = null; return }   // back closes the magnifier first
-                saveIfDirty()
+                // BACK DISCARDS (owner 2026-09-01). This face opens by accident often enough that
+                // committing on the way out was writing states the wearer never meant to report,
+                // and a false label is worse than a missing one: it cannot be told apart from a
+                // true one later. Nothing leaves this screen without an explicit confirmation.
+                discard()
                 finish()
             }
         })
@@ -253,18 +264,40 @@ class TagActivity : ComponentActivity() {
                     // having, because then the truth and the label describe the same moment.
                     // Never automatic: that app opens by accident often enough already, and junk
                     // readings would poison the calibration.
-                    Button(
-                        onClick = { startEcg() },
-                        modifier = Modifier.size(width = 130.dp, height = 30.dp),
-                    ) { Text("ecg \u00b7 hold still 30s", fontSize = 9.sp) }
+                    // CONFIRM, beside the ECG button, and the ECG button confirms too (owner
+                    // 2026-09-01). Everything above this row is a draft. The button is dim until
+                    // there is something to record, so an accidental open shows plainly that
+                    // nothing is pending, and an accidental exit records nothing at all.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Button(
+                            onClick = { confirmAndFinish() },
+                            enabled = dirty,
+                            modifier = Modifier.size(width = 78.dp, height = 34.dp),
+                        ) {
+                            Text(
+                                if (dirty) "confirm" else "nothing yet",
+                                fontSize = if (dirty) 12.sp else 9.sp,
+                            )
+                        }
+                        Spacer(Modifier.size(width = 6.dp, height = 1.dp))
+                        Button(
+                            onClick = { startEcg() },
+                            modifier = Modifier.size(width = 56.dp, height = 34.dp),
+                        ) { Text("ecg", fontSize = 12.sp) }
+                    }
+                    Text(
+                        "ecg records too, then reads 30 s \u2014 hold still",
+                        fontSize = 8.sp, color = DIM,
+                    )
 
                     // ---- the rules, in small type, until they are second nature (owner) ----
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "long-press = primary · tap = secondary · back saves\n" +
+                        "long-press = primary · tap = secondary\n" +
+                            "NOTHING IS RECORDED UNTIL YOU CONFIRM · back discards\n" +
                             "low intensity: Neutral primary + secondaries\n" +
                             "low confidence: secondaries only, no primary\n" +
-                            "ecg: a real 30 s reading, saves first\n" +
+                            "ecg: confirms, then takes a real 30 s reading\n" +
                             "timeline: tap jumps to an event, long-press places one\n" +
                             "yours clears away when emptied · detected ones stay",
                         fontSize = 8.sp, color = DIM, textAlign = TextAlign.Center,
@@ -366,7 +399,7 @@ class TagActivity : ComponentActivity() {
 
     /** The magnifier's "place": start a label about that moment. */
     private fun placeAt(t: OffsetDateTime) {
-        saveIfDirty()
+        discard()
         resetEditor()
         draftTsEvent = t.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
         scrubAt = null
@@ -378,7 +411,7 @@ class TagActivity : ComponentActivity() {
     }
 
     private fun selectItem(tapped: TimelineItem?) {
-        saveIfDirty()
+        discard()
         resetEditor()
         when {
             tapped == null -> {}
@@ -493,6 +526,19 @@ class TagActivity : ComponentActivity() {
         promptSource = held.promptSource
         // Only move the draft moment if the person has not already placed one themselves.
         if (draftTsEvent == null) draftTsEvent = held.promptTs
+    }
+
+    /** The confirm button: record what is on screen, then leave. The only way in, besides ECG. */
+    private fun confirmAndFinish() {
+        saveIfDirty()
+        finish()
+    }
+
+    /** Leave without recording. The counterpart of confirm, and the default on every exit. */
+    private fun discard() {
+        if (dirty) android.util.Log.i("wristwork-tag", "unconfirmed edit discarded")
+        dirty = false
+        pendingNote = null
     }
 
     private suspend fun reloadTimeline() {

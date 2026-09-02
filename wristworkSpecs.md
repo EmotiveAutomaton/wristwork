@@ -364,6 +364,28 @@ over an hour, worst nine hours). One rule is enforced in code: only a label nami
 question may enter the evaluation set, because a reconstructed guess in the holdout cannot be
 removed later.
 
+**2026-09-01 — nothing is recorded until it is confirmed.** Owner: the state face opens by accident
+often enough that "the watch itself is recording false information today." Every exit used to
+commit — back, and switching to another timeline event. Now nothing leaves the grid without an
+explicit press: a CONFIRM button at the bottom beside the ECG button, and the ECG button confirms
+too, so the two ways to record are "confirm" and "confirm and take a reading". Back discards, and
+so does selecting a different event. The button reads "nothing yet" and is disabled until there is
+something to record, so an accidental open shows plainly that nothing is pending. The asymmetry is
+the whole argument: a missing label costs one row, a false label is indistinguishable from a true
+one forever and every model fitted afterwards inherits it.
+
+**2026-09-01 — one question owns a half hour on either side of it.** Owner: too many flags in a
+short period, and rapid emotional swings are rare enough that a double hit should not even be
+considered. The detector's own 90-minute refractory was working, but it only ever knew about its
+own questions — the random ones are allocated a day ahead by a separate job, so nothing enforced a
+gap BETWEEN the two streams. On 09-01 the detector asked at 08:37 and a random question landed at
+09:02, twenty-five minutes apart, with no rule broken. The detector is the half that can still
+choose, so it yields: it now reads every question already asked or already scheduled, and refuses
+to speak within thirty minutes of any of them on either side. Replayed against the record, this
+suppresses two of the fourteen questions asked so far and leaves the other twelve untouched. It
+also protects the evaluation stream, since a random question answered in the shadow of a detector
+question is not a clean sample of an ordinary moment.
+
 ---
 
 # telltale — original build runbook (historical)
