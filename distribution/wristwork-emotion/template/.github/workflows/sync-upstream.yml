@@ -1,0 +1,73 @@
+name: sync eligible wristwork changes
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wristwork-emotion-upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'EmotiveAutomaton/wristwork-emotion'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out wristwork-emotion
+        uses: actions/checkout@v4
+        with:
+          path: target
+      - name: Check out wristwork source
+        uses: actions/checkout@v4
+        with:
+          repository: EmotiveAutomaton/wristwork
+          ref: main
+          path: upstream
+      - name: Record source revision
+        id: source
+        shell: bash
+        run: echo "sha=$(git -C upstream rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Export reviewed emotion files
+        shell: pwsh
+        run: ./upstream/tools/export-wristwork-emotion.ps1 -Destination ./export
+      - name: Replace generated tree
+        shell: bash
+        run: rsync -a --delete --exclude='.git/' "$GITHUB_WORKSPACE/export/" "$GITHUB_WORKSPACE/target/"
+      - name: Detect a change
+        id: change
+        working-directory: target
+        shell: bash
+        run: |
+          if [[ -n "$(git status --porcelain)" ]]; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.change.outputs.changed == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - if: steps.change.outputs.changed == 'true'
+        uses: gradle/actions/setup-gradle@v4
+      - name: Validate generated tree
+        if: steps.change.outputs.changed == 'true'
+        working-directory: target
+        shell: bash
+        run: |
+          git add --all
+          bash tools/hooks/secret-grep.sh --all
+          bash ./gradlew :app:testDebugUnitTest :app:assembleDebug --no-daemon
+      - name: Commit generated update
+        if: steps.change.outputs.changed == 'true'
+        working-directory: target
+        shell: bash
+        run: |
+          git config user.name 'wristwork-emotion sync'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m "Sync eligible wristwork changes from ${{ steps.source.outputs.sha }}"
+          git push

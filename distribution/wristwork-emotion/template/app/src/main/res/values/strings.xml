@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">wristwork emotion</string>
+    <string name="complication_health">wristwork emotion · health</string>
+    <string name="complication_emotion">wristwork emotion</string>
+</resources>

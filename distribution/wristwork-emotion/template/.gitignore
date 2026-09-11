@@ -1,0 +1,29 @@
+# Private configuration and archives
+config.properties
+local.properties
+.env
+.env.*
+!*.env.example
+backend/data/
+setup-receipt.*
+*.keystore
+*.jks
+*.pem
+*.key
+
+# Build and IDE output
+.gradle/
+build/
+app/build/
+*.apk
+*.aab
+*.ap_
+.externalNativeBuild/
+.cxx/
+.idea/
+*.iml
+.kotlin/
+.DS_Store
+captures/
+__pycache__/
+*.pyc

@@ -1,0 +1,31 @@
+services:
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    restart: unless-stopped
+    command: serve
+    environment:
+      NTFY_CACHE_FILE: /var/lib/ntfy/cache.db
+      NTFY_AUTH_FILE: /var/lib/ntfy/auth.db
+      NTFY_AUTH_DEFAULT_ACCESS: deny-all
+      NTFY_ENABLE_LOGIN: "true"
+      NTFY_MESSAGE_SIZE_LIMIT: 32K
+    volumes:
+      - ntfy-data:/var/lib/ntfy
+    ports:
+      - "${NTFY_BIND:-0.0.0.0:8093}:80"
+
+  archiver:
+    build: ./archiver
+    restart: unless-stopped
+    depends_on:
+      - ntfy
+    environment:
+      ARCHIVE_BASE_URL: http://ntfy
+      ARCHIVE_TOKEN: ${NTFY_TOKEN}
+      ARCHIVE_TOPICS: ${TOPIC_TAGS},${TOPIC_FLAGS},${TOPIC_HEALTH},${TOPIC_PROMPTS}
+      ARCHIVE_DIR: /archive
+    volumes:
+      - ./data:/archive
+
+volumes:
+  ntfy-data:
