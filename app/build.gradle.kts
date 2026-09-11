@@ -87,4 +87,5 @@ dependencies {
     implementation(libs.wear.remote.interactions)
     implementation(libs.health.services.client)
     implementation(libs.guava)
+    testImplementation("junit:junit:4.13.2")
 }

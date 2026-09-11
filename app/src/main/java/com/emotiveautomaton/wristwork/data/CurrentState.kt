@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import java.time.OffsetDateTime
 import kotlinx.coroutines.flow.first
 
 /** What the face shows: the latest state code and when it was tagged. Small scalars only (D3). */
@@ -61,9 +62,41 @@ object CurrentState {
         }
     }
 
+    /**
+     * Retire a prompt because its own notification was dismissed. The identity check matters:
+     * Android can leave an older notification visible after a newer question has become the one
+     * shown as NEW. Clearing the old notification must not erase the newer question.
+     */
+    suspend fun clearPromptIfMatches(context: Context, expectedId: String): Boolean {
+        var cleared = false
+        context.store.edit {
+            if (!shouldClearPendingPrompt(it[KEY_PENDING] ?: false, it[KEY_PROMPT_ID], expectedId))
+                return@edit
+            it[KEY_PENDING] = false
+            it.remove(KEY_PROMPT_ID); it.remove(KEY_PROMPT_TS); it.remove(KEY_PROMPT_SOURCE)
+            cleared = true
+        }
+        return cleared
+    }
+
     suspend fun write(context: Context, state: String, sinceEpochMs: Long, noticed: Boolean) {
         context.store.edit {
             it[KEY_STATE] = state; it[KEY_SINCE] = sinceEpochMs; it[KEY_NOTICED] = noticed
         }
     }
+}
+
+/** Pure decision kept here so dismissal identity can be checked without Android state. */
+internal fun shouldClearPendingPrompt(
+    pending: Boolean,
+    pendingId: String?,
+    dismissedId: String,
+): Boolean = pending && pendingId == dismissedId
+
+/** A pending marker older than the editor's six-hour timeline can no longer be shown honestly. */
+internal fun pendingPromptIsOutsideTimeline(promptTs: String?, nowEpochMs: Long): Boolean {
+    val promptEpochMs = promptTs?.let {
+        runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }.getOrNull()
+    } ?: return true
+    return nowEpochMs - promptEpochMs > 6L * 60L * 60L * 1000L
 }

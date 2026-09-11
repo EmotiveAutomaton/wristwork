@@ -15,8 +15,10 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.emotiveautomaton.wristwork.BuildConfig
 import com.emotiveautomaton.wristwork.R
+import com.emotiveautomaton.wristwork.data.TagDb
 import com.emotiveautomaton.wristwork.net.NtfyClient
 import com.emotiveautomaton.wristwork.ui.TagActivity
+import java.time.OffsetDateTime
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -72,7 +74,7 @@ class PromptWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             // Stale prompts are dropped rather than asked late: an hour-old "how are you right
             // now" is a worse question than no question, and a skipped random prompt is honestly
             // a skipped random prompt rather than a mistimed answer in the evaluation set.
-            if (now - deliverAt > STALE_AFTER_S) {
+            if (now - deliverAt > STALE_AFTER_S && !wasDeferred(prefs, id)) {
                 fired += id
                 // If THIS is the question the face is still advertising, retire it: a marker that
                 // outlives the question it stands for is worse than no marker.
@@ -86,7 +88,47 @@ class PromptWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 }
                 continue
             }
-            val aboutS = p["ts"]?.jsonPrimitive?.content?.toLongOrNull() ?: deliverAt
+            var aboutS = p["ts"]?.jsonPrimitive?.content?.toLongOrNull() ?: deliverAt
+
+            // ONE HOUR AROUND ANY EXISTING EVENT (owner, 2026-09-02) -- but a random question is
+            // MOVED, never cancelled, and this is the owner's correction to a worse plan of mine.
+            // Exempting the random stream from the hour rule would have made it the only kind of
+            // question that can appear beside another event, which makes it IDENTIFIABLE as the
+            // control. A control the wearer can recognise has stopped being a control, and no
+            // amount of care afterwards recovers that. Cancelling it instead would bias the
+            // evaluation set by dropping exactly the moments that follow notable ones.
+            //
+            // So it waits. Each pass re-checks; when the hour is finally clear it fires, asking
+            // about a FRESH moment rather than the stale one it was allocated for -- which is the
+            // same shape a detector question has, and keeps the two indistinguishable. Deferral
+            // is capped, because a question deferred forever is a cancelled question in disguise.
+            if (crowded(ctx, now)) {
+                if (source != "random") {
+                    // A detector question names a specific scored moment. Moving it would make it
+                    // ask about a moment nothing was ever detected at, which is a lie dressed as
+                    // data -- so it lapses instead, and the detector finds another moment later.
+                    // The wearer never sees a question that was not sent, so nothing about this
+                    // is visible from the outside and blinding is untouched.
+                    fired += id
+                    continue
+                }
+                val since = deferredSince(prefs, id, now)
+                if (now - since <= DEFER_GIVE_UP_S) {
+                    android.util.Log.i("wristwork-prompt", "deferring random prompt $id: an event is within the hour")
+                    continue                       // NOT marked fired -- it comes back next pass
+                }
+                android.util.Log.w("wristwork-prompt", "gave up on $id after deferring it for hours")
+                fired += id
+                clearDeferral(prefs, id)
+                continue
+            }
+            if (wasDeferred(prefs, id)) {
+                // Relocated, lag and all. A question held back must not then ask about an hour
+                // ago, and it must carry the same gap between naming and arriving that a detector
+                // question carries, or the delay itself becomes the tell.
+                aboutS = now - LAGS_S.random()
+                clearDeferral(prefs, id)
+            }
             notify(ctx, id, source, aboutS)
             // The question is RECORDED, not merely announced (owner 2026-09-01). The notification
             // is one door to it; the face is another, and the grid opened from either must know
@@ -126,19 +168,68 @@ class PromptWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 ),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        // Clearing the notification means "skip this question." Without this, the notification
+        // disappeared while CurrentState kept promptPending forever; six hours later its marker
+        // also fell outside the timeline, leaving a NEW face that opened onto no triangle.
+        val dismiss = PendingIntent.getBroadcast(
+            ctx, id.hashCode(),
+            Intent(ctx, PromptDismissReceiver::class.java)
+                .putExtra(PromptDismissReceiver.EXTRA_PROMPT_ID, id),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         val n = Notification.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_state)
             .setContentTitle("State?")              // identical for random and signal, by design
             .setContentText("· $clock")
             .setContentIntent(tap)
+            .setDeleteIntent(dismiss)
             .setAutoCancel(true)
             .build()
         nm.notify(id.hashCode(), n)
     }
 
+    /** Is there already an event within the hour, in either direction? Mirrors CueWorker. */
+    private suspend fun crowded(ctx: Context, now: Long): Boolean {
+        val db = TagDb.get(ctx)
+        fun near(iso: String?): Boolean = iso != null && runCatching {
+            kotlin.math.abs(OffsetDateTime.parse(iso).toEpochSecond() - now) < BRACKET_S
+        }.getOrDefault(false)
+        if (db.tags().latestEvents(12).any { near(it.tsEntered) || near(it.tsEvent) }) return true
+        return db.flags().latestBodyResponses(6).any { near(it.ts) }
+    }
+
+    private fun deferredSince(prefs: android.content.SharedPreferences, id: String, now: Long): Long {
+        val existing = prefs.getLong(KEY_DEFER + id, 0L)
+        if (existing > 0L) return existing
+        prefs.edit().putLong(KEY_DEFER + id, now).apply()
+        return now
+    }
+
+    private fun wasDeferred(prefs: android.content.SharedPreferences, id: String) =
+        prefs.getLong(KEY_DEFER + id, 0L) > 0L
+
+    private fun clearDeferral(prefs: android.content.SharedPreferences, id: String) {
+        prefs.edit().remove(KEY_DEFER + id).apply()
+    }
+
     companion object {
         private const val PREFS = "prompts"
         private const val KEY_FIRED = "fired_ids"
+        private const val KEY_DEFER = "deferred_since_"
+
+        /** Matches the detector's own bracket (tools/rig/detect.py, EVENT_BRACKET_MIN). */
+        private const val BRACKET_S = 60L * 60L
+
+        /** A question held back this long has missed its day; recorded as never asked. */
+        private const val DEFER_GIVE_UP_S = 6L * 60L * 60L
+
+        /**
+         * How far behind its delivery a question names its moment. A detector question is one
+         * five-minute epoch plus a poll cycle behind — measured across every question ever sent:
+         * 5, 10, 15 or 20 minutes. A relocated random question draws from the same set, because
+         * an identical question that arrives with a different lag is not identical.
+         */
+        private val LAGS_S = listOf(5L, 10L, 15L, 20L).map { it * 60L }
         private const val CHANNEL = "prompts"
         private const val STALE_AFTER_S = 45L * 60L
         const val WORK_NAME = "prompt-poll"

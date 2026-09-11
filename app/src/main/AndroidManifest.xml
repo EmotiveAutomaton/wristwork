@@ -68,6 +68,11 @@
             android:exported="false"
             android:theme="@android:style/Theme.DeviceDefault" />
 
+        <!-- Swiping away a state question retires that exact pending prompt, so NEW cannot stick. -->
+        <receiver
+            android:name=".work.PromptDismissReceiver"
+            android:exported="false" />
+
         <!-- Family-2 owned collection: platform-bound passive listener; batches -> health topic. -->
         <service
             android:name=".health.PassiveDataService"

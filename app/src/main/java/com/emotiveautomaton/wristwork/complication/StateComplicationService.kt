@@ -24,12 +24,27 @@ class StateComplicationService : SuspendingComplicationDataSourceService() {
 
     override suspend fun onComplicationRequest(request: ComplicationRequest): ComplicationData? {
         if (request.complicationType != ComplicationType.SHORT_TEXT) return null
+        // The emotion-only distribution has no personal channel complications to lend this
+        // schedule a refresh. The state provider owns prompt polling because prompts belong to
+        // this surface; KEEP makes the duplicate call from older/full builds harmless.
+        com.emotiveautomaton.wristwork.work.PromptWorker.ensureScheduled(applicationContext)
         // Idempotent; self-heals passive-collection registration after reboots (H1 family 2).
         com.emotiveautomaton.wristwork.health.PassiveDataService.ensureRegistered(this)
         // One-off per app version: ask the device what it can actually sense and file the
         // answer in the health stream (SensorInventory). No wakeup of its own.
         com.emotiveautomaton.wristwork.health.SensorInventory.postOnce(this)
-        val snap = CurrentState.read(this)
+        var snap = CurrentState.read(this)
+        // Repair prompts delivered by older app versions that outlived their notification. Once
+        // the asked-about moment has left the six-hour timeline, NEW can no longer lead to a
+        // visible marker. Retiring it here also repairs an already-stuck face after an upgrade.
+        if (snap.promptPending && com.emotiveautomaton.wristwork.data.pendingPromptIsOutsideTimeline(
+                snap.promptTs, System.currentTimeMillis())) {
+            val cleared = snap.promptId?.let { CurrentState.clearPromptIfMatches(this, it) } ?: run {
+                CurrentState.clearPrompt(this)
+                true
+            }
+            if (cleared) snap = CurrentState.read(this)
+        }
         // A waiting prompt takes the whole line (owner 2026-08-28). The age is what the line
         // normally carries, so replacing it is the loudest thing this slot can do without a
         // notification of its own — and it goes back to the age the moment a label lands.
