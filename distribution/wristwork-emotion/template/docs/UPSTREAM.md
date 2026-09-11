@@ -8,7 +8,8 @@ The canonical repository's hourly `sync-upstream.yml` workflow checks out
 `EmotiveAutomaton/wristwork@main`, runs its explicit emotion-export allowlist, and
 commits only when the generated tree changes. GitHub's repository-scoped token can
 write only to `wristwork-emotion`; no cross-repository personal token is required.
-The workflow also supports a manual run.
+The workflow also supports a manual run. It runs the secrets guard, unit tests, and
+APK build before committing, so a failed export leaves the target branch unchanged.
 
 The allowlist is deliberate. New files in `wristwork` do not enter this repository
 until the exporter is updated, so printer controls, agent status, machine telemetry,
