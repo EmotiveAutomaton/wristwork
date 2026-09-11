@@ -16,7 +16,9 @@ The clean [`wristwork-emotion`](https://github.com/EmotiveAutomaton/wristwork-em
 upstream now exists with fresh history, an explicit privacy allowlist, portable
 private backend/archive, setup and doctor tooling, a launcher entry, and focused
 skills. Its hourly sync from `wristwork/main` was exercised through export, secrets
-scan, tests, build, commit, and push. The boundary and update model are in
+scan, tests, build, commit, and push; a final no-change run also preserved the
+target-owned workflows and required hidden files. The boundary and update model are
+in
 [REUSABLE-EMOTION-APP.md](REUSABLE-EMOTION-APP.md); the wearer path is in
 [NEW-WEARER-SETUP.md](NEW-WEARER-SETUP.md).
 

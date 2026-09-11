@@ -30,14 +30,21 @@ setup/data/sync docs, and two validated agent skills.
 
 **Automatic updating is exercised, not just configured.** The target's hourly and
 manual workflow checks out `wristwork/main`, runs the allowlist exporter, replaces the
-generated tree, and commits only after its secrets guard, five tests, and APK build
-pass. A real upstream documentation change was imported, validated, committed, and
-pushed by the workflow. Canonical sync uses only workflow-scoped repository write
-permission. Personal forks use GitHub's normal Sync fork/upstream merge so their code
-is not overwritten hourly.
+generated tree except `.github/`, and commits only after its secrets guard, five tests,
+and APK build pass. A real upstream documentation change was imported, validated,
+committed, and pushed by a repaired workflow run. The first Linux run revealed that
+PowerShell enumeration omitted dotfiles; forced enumeration and required-hidden-file
+assertions now prevent that failure, and the missing files were restored. A final
+no-change run passed and preserved the hidden files and target-owned workflows.
+Canonical sync uses only workflow-scoped repository write permission. Workflow-file
+updates require manual review and push because the workflow token cannot modify them.
+Personal forks use GitHub's normal Sync fork/upstream merge so their code is not
+overwritten hourly.
 
-**Validated:** both the full wristwork app and the standalone target build; the target
-tests pass 5/5; both target skills pass Skill Creator validation; Markdown links,
+**Validated:** both the full wristwork app and the standalone target build locally;
+the target's current GitHub build also passed its secret scan, five tests, debug APK
+build, and artifact upload. Both target skills pass Skill Creator validation;
+Markdown links,
 PowerShell and Python syntax, Git whitespace, the Docker Compose model, ignored
 private-file rules, and scans for private paths/secret-shaped values pass. The config
 generator ran with disposable values. No backend, credential, prompt, label, or health

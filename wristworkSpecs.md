@@ -476,7 +476,9 @@ allowlist; the friend forks that clean upstream. An hourly/manual workflow impor
 changes from `wristwork/main` only after its secrets scan, tests, and APK build pass. Printer, rig,
 agent-dashboard, Fetch, private configuration, personal archives, and wristwork history stay
 outside it. Personal forks receive updates through normal fork synchronization so their changes
-are not overwritten by the canonical mirror.
+are not overwritten by the canonical mirror. The canonical target owns `.github/`; workflow-file
+changes are manually reviewed and pushed while all other allowlisted content remains automatic.
+The exporter asserts that required hidden files are present before a sync can modify the target.
 
 ---
 

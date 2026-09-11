@@ -39,11 +39,20 @@ diagnostic or medical claim.
 
 The target repository runs `.github/workflows/sync-upstream.yml` at minute 17 of
 every hour and on manual dispatch. It checks out `wristwork/main`, exports the
-allowlist, replaces the generated target tree, and commits only when content changes.
-Before committing it runs the secrets guard, five prompt-state tests, and a complete
-debug APK build. The first exercised sync successfully imported a real documentation
-change and pushed it using only the workflow's repository-scoped `contents: write`
-permission.
+allowlist, replaces the generated target tree except `.github/`, and commits only
+when content changes. Before committing it runs the secrets guard, five prompt-state
+tests, and a complete debug APK build. A later sync successfully imported a real
+documentation change and pushed it using only the workflow's scoped
+`contents: write` permission. A final no-change run completed successfully after
+export and confirmed that target-owned workflow files remain in place.
+
+The first Linux-hosted exercise exposed that PowerShell directory enumeration had
+omitted dotfiles. The exporter now uses forced enumeration and refuses to complete
+unless representative hidden files and directories exist; the omitted files were
+restored before the repaired sync. GitHub's workflow token cannot update workflow
+files without a broader workflow-writing credential, so `.github/` is deliberately
+target-managed. Changes to the build or sync workflows are reviewed and pushed to
+the target manually; all other allowlisted content remains automatic.
 
 The sync job is guarded to the canonical `EmotiveAutomaton/wristwork-emotion` repo.
 A friend's fork receives updates through GitHub's normal **Sync fork** or an upstream

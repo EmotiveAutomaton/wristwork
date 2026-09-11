@@ -98,4 +98,7 @@ allowlist exports the emotion/health surface and public setup material into fres
 personal integrations, configuration, data and wristwork history behind. The canonical target
 syncs hourly from `wristwork/main`, validates the generated tree before committing, and uses a
 workflow-scoped repository token. Personal forks use normal upstream synchronization so their own
-code is not replaced by the canonical mirror.
+code is not replaced by the canonical mirror. The target owns `.github/`: workflow changes are
+reviewed and pushed there manually because the sync token cannot modify workflow files. The
+exporter requires representative hidden files so cross-platform enumeration cannot silently omit
+the distribution's skills, workflows, ignore rules, or environment template.
