@@ -18,11 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out wristwork-emotion
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           path: target
       - name: Check out wristwork source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: EmotiveAutomaton/wristwork
           ref: main
@@ -48,7 +48,7 @@ jobs:
             echo 'changed=false' >> "$GITHUB_OUTPUT"
           fi
       - if: steps.change.outputs.changed == 'true'
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21

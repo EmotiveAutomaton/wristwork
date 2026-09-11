@@ -1,5 +1,10 @@
 # Health component — design record (owner meeting, 2026-08-24)
 
+> Read with the later dated amendments in [wristworkSpecs.md](wristworkSpecs.md).
+> They update label provenance, confirmation, display names, prompting and ECG
+> availability. The phased purpose and the full-wear-day battery amendment below
+> remain relevant; the original capture/UI details are not all current.
+
 Output of the owner's design meeting (Cowork session, 2026-08-24). This file is the current
 design authority for the health/state work. Precedence:
 

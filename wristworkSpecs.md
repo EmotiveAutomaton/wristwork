@@ -7,6 +7,15 @@ it, this section wins. Owner sets design at a high level; implementation detail 
 
 ## Current design (updated 2026-08-24)
 
+**Agent handoff and source navigation (2026-09-06).** `AGENTS.md` is the current
+cross-agent entry point, supported by an architecture map, proposed roadmap and
+focused repo skills. Older agent instructions remain as history with a forwarding
+note. This pass changes documentation and agent workflows only. The later dated
+owner amendments below govern behavior; the original runbook remains untouched.
+In particular, the health design's full-wear-day battery criterion supersedes the
+old 3% figure still quoted in early entries, and the approved allocator does not
+open the learned-model/display gates. See `docs/STATE.md` for verification limits.
+
 **Name:** wristwork (runbook said "telltale"; owner renamed 2026-08-22).
 
 **System as built:** Pixel Watch 5 complications <- ntfy bus on the Synology NAS (:8093) <- feeders
@@ -385,6 +394,89 @@ to speak within thirty minutes of any of them on either side. Replayed against t
 suppresses two of the fourteen questions asked so far and leaves the other twelve untouched. It
 also protects the evaluation stream, since a random question answered in the shadow of a detector
 question is not a clean sample of an ordinary moment.
+
+**2026-09-02 — one hour around any existing event belongs to it.** Owner: "simply do not add new
+events that are within one hour unless I manually add them... otherwise everything else just
+silently gets removed." The observation behind it is that entering a label is itself a
+physiological event — looking at a watch and thinking about feelings moves a heart rate — so a
+manual note is very often followed by the detector flagging the aftermath of that note. The old
+guard for exactly this was twelve minutes, which covered the act of labelling and not the recovery
+from it. It is now one hour, and it is the same hour that already separated questions from each
+other: one rule over every moment the timeline already holds — questions asked or scheduled,
+labels entered, moments described. Applied by the detector on the rig and by the body-response cue
+on the watch, which also collapses a burst of Fitbit flags into at most one ask. Suppression is
+SILENT by instruction: the event is never created, so there is nothing to dismiss. Manual entry is
+the deliberate way past the block, at any moment the wearer chooses — a person's own attention is
+not noise.
+
+Replayed against the record this suppresses two of the fourteen questions asked so far, the same
+two as the previous rule, because historically the detector fires BEFORE a label is entered rather
+than after; the rule is mostly forward-looking, for the pattern the owner reports.
+
+**The one exception, made deliberately and against the letter of the instruction: random questions
+are NOT suppressed.** They are the evaluation stream. Dropping one because a label was entered
+half an hour earlier would make the "random" sample conditional on the wearer's own behaviour —
+and specifically would make it miss the aftermath of notable moments, which is where states are
+most distinctive. That is the one bias the holdout cannot survive, and it cannot be corrected
+later. Flagged to the owner; one line to change if overruled.
+
+**2026-09-02 — random questions are MOVED, never cancelled, and the streams were not blinded.**
+Owner's correction to the exception above, and it is the better argument: if a random question were
+the only kind that could appear beside another event, it becomes IDENTIFIABLE as the control, and a
+control the wearer can recognise has stopped being a control. So a random question that falls inside
+the hour waits, re-checks each poll, and fires when the hour is finally clear — asking about a fresh
+moment rather than the stale one it was allocated for. Deferral is capped at six hours, because a
+question deferred forever is a cancelled question in disguise. A DETECTOR question in the same
+situation lapses instead: its moment is a specific scored epoch and moving it would make it ask
+about a moment nothing was detected at. Nothing about a question that was never sent is visible from
+outside, so blinding is untouched by that.
+
+**Checking this exposed a live blinding failure that predates it.** Measured across every question
+ever sent: a detector question names a moment 5, 10, 15 or 20 minutes before it arrives; a random
+question named the exact minute it arrived, a lag of zero, every single time. The notification text
+alone said which kind it was. The allocator now draws the same lag set, and a relocated random
+question draws from it too. The moment asked about is still uniformly random across the waking day;
+only the offset moved. The two random labels collected before this date came from lag-zero questions
+and should be treated as unblinded.
+
+**2026-09-02 — on the print chooser, tap to look and hold to print.** Fetch now slices all three
+candidates before offering them, so on its side choosing IS printing ("the numbers were on the card,
+so this is the decision") — which meant one accidental tap on the wrist started a print. Short press
+now opens that model's details (its own photograph, weight, print time, licence) and touches the bus
+not at all; long press sends it and starts it if the plate allows. The plate assessment travels with
+the offer, so the warning appears before the press rather than after it. Fetch's guards are unchanged
+and are the real ones: the bed interlock, the offer expiry, the daily cap.
+
+**2026-09-02 — the printer line says READY when models are waiting.** Owner: instead of the time
+since the last print, the face should say READY once Fetch has come back with a set that is
+prepared to print. Three conditions, all required, because a word that lies is worse than no word:
+an offer is the newest thing Fetch has said (it always says something when one is answered or
+refused, so "still newest" IS "still open"), it has not expired, and at least one candidate carries
+real slicer numbers. It also yields to a print in progress — the owner asked for READY instead of
+the IDLE line, and a running job's percentage outranks an offer by a distance. The complication
+refreshes every fifteen minutes on the battery budget, which would make a thirty-second answer feel
+broken, so speaking a request now nudges the line a few times over the following minute: the one
+moment the watch knows an answer is coming.
+
+**2026-09-11 — dismissing a question means skipping it.** Owner-reported failure: swiping away a
+state notification left its stored question pending, so the face continued to say NEW; once its
+moment aged past the six-hour timeline, tapping NEW opened a grid with no triangle and no way to
+retire the state. A user dismissal now clears only that exact pending question, creates no label,
+and requests an immediate face refresh. The identity check prevents dismissing an older visible
+notification from erasing a newer pending question. A second guard retires malformed or six-hour-old
+pending state at complication refresh, both matching what the timeline can still display and repairing
+questions stranded by older app versions. Opening the notification remains an answer path and keeps
+its original prompt identity, source, and asked-about time.
+
+**2026-09-11 — reusable wristwork-emotion distribution.** The owner wants another Pixel Watch 5
+wearer to be able to direct an agent at the project and get the emotion instrument running quickly,
+without receiving this wearer's data or household integrations. The clean public
+`EmotiveAutomaton/wristwork-emotion` repository now has fresh history and an explicit export
+allowlist; the friend forks that clean upstream. An hourly/manual workflow imports eligible
+changes from `wristwork/main` only after its secrets scan, tests, and APK build pass. Printer, rig,
+agent-dashboard, Fetch, private configuration, personal archives, and wristwork history stay
+outside it. Personal forks receive updates through normal fork synchronization so their changes
+are not overwritten by the canonical mirror.
 
 ---
 

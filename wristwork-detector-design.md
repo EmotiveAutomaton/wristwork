@@ -1,5 +1,12 @@
 # wristwork — detector design v2 (supersedes telltale-detector-design.md)
 
+> Reading note, 2026-09-06: this is the staged design and holdout authority, with
+> later amendments in [wristworkSpecs.md](wristworkSpecs.md). The implemented
+> allocator reads the owned watch stream, not the Google intraday-HRV path in §2.
+> Current prompt spacing, deferral and blinding rules are the September amendments.
+> Default budgets in code and this early design differ; inspect configured values
+> for an operational review and do not change the owner's budget from this note.
+
 Global rename: the project is **wristwork**. Find-replace `telltale` in CLAUDE.md and the health-context doc when carting this over; ntfy topic names are config, rename or keep at will.
 
 ## 0. Identity, staged

@@ -1,5 +1,11 @@
 # Design decisions
 
+> Reading note, 2026-09-06: D1–D15 below record the initial August 22 design.
+> Later owner amendments in [the living spec](../wristworkSpecs.md) supersede
+> several details, including periodic prompt work, LAN-only reachability, printer
+> visibility and stale rendering. See [ARCHITECTURE.md](ARCHITECTURE.md) for the
+> current source map; retain these entries for their rationale.
+
 Each entry: what was decided, why, what would change it. Made by the build agent unless marked owner.
 
 ## D1 — minSdk 36 (2026-08-22, proposed)
@@ -84,3 +90,12 @@ Each channel service polls `{server}/{topic}/json?poll=1&since={last}` inside th
 scheduled complication update (UPDATE_PERIOD_SECONDS=900; the ~15-min floor is accepted). On
 network failure the cached payload renders with its true age still ticking — no retry machinery,
 no alarms. Last payload + timestamp per topic live in DataStore.
+
+## D16 — wristwork-emotion is a generated clean repository (owner decision, 2026-09-11)
+
+Another wearer forks `EmotiveAutomaton/wristwork-emotion`, not wristwork directly. An explicit
+allowlist exports the emotion/health surface and public setup material into fresh history, leaving
+personal integrations, configuration, data and wristwork history behind. The canonical target
+syncs hourly from `wristwork/main`, validates the generated tree before committing, and uses a
+workflow-scoped repository token. Personal forks use normal upstream synchronization so their own
+code is not replaced by the canonical mirror.

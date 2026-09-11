@@ -1,5 +1,95 @@
 # STATE — where each phase stands
 
+## Status, 2026-09-11 — prompt fix installed; wristwork-emotion live and syncing
+
+**Requested:** fix the emotion face getting trapped on NEW after its notification
+was cleared, install the fix over wireless adb, then prepare a clean reusable
+repository named wristwork-emotion that can keep receiving eligible work from
+`wristwork/main` without carrying the personal repository's data or history.
+
+**The stuck state is fixed and installed.** Prompt notifications now use an Android
+delete intent: swipe-away/Clear All retires only the matching pending prompt, creates
+no label, and requests a complication refresh. An older notification cannot clear a
+newer question. A six-hour/malformed-state guard repairs prompts stranded by older
+APKs after their timeline marker can no longer appear. Five focused tests cover the
+identity and age rules. The full debug APK built successfully and `adb install -r`
+reported Success on the connected Pixel Watch 5; the package remained present and
+existing application data was not cleared. The next naturally occurring prompt still
+needs the physical dismissal/face observation, so interaction behavior is not claimed
+from installation alone.
+
+**The reusable repository now exists:**
+[`EmotiveAutomaton/wristwork-emotion`](https://github.com/EmotiveAutomaton/wristwork-emotion)
+is public with a fresh root history and separate application ID. Its explicit export
+allowlist keeps the emotion/health app, prompt provenance, offline queue, generic ntfy
+transport, tests, and public setup material while excluding printer, rig, Fetch,
+agent-status, private infrastructure, local configuration, archives, and wristwork's
+history. The target includes an authenticated deny-all ntfy Compose service,
+append-only NDJSON archiver, config/ACL helpers, read-only doctor, launcher entry,
+setup/data/sync docs, and two validated agent skills.
+
+**Automatic updating is exercised, not just configured.** The target's hourly and
+manual workflow checks out `wristwork/main`, runs the allowlist exporter, replaces the
+generated tree, and commits only after its secrets guard, five tests, and APK build
+pass. A real upstream documentation change was imported, validated, committed, and
+pushed by the workflow. Canonical sync uses only workflow-scoped repository write
+permission. Personal forks use GitHub's normal Sync fork/upstream merge so their code
+is not overwritten hourly.
+
+**Validated:** both the full wristwork app and the standalone target build; the target
+tests pass 5/5; both target skills pass Skill Creator validation; Markdown links,
+PowerShell and Python syntax, Git whitespace, the Docker Compose model, ignored
+private-file rules, and scans for private paths/secret-shaped values pass. The config
+generator ran with disposable values. No backend, credential, prompt, label, or health
+record was created for another wearer. Their first real setup remains the acceptance
+test for permissions, archive arrival, passive collection, offline replay, remote
+reachability, prompt dismissal, and full-wear-day battery behavior.
+
+## Status, 2026-09-06 — Codex handoff and repository orientation
+
+**Requested:** take over from Claude, learn the nearby Agent Core and this repo's
+goals/structure, build appropriate agent documentation and skills, and recommend
+where to build next.
+
+**Completed:** added [AGENTS.md](../AGENTS.md) as the cross-agent entry point,
+an [architecture map](ARCHITECTURE.md), a [ranked roadmap](ROADMAP.md), and a
+[documentation index](README.md). Refreshed the root and rig READMEs. Added
+forwarding/supersession notes to CLAUDE and older design records while preserving
+their content and the existing local work. The living spec records this handoff.
+Three repo skills are installed under `.agents/skills/`: watch changes, pipeline
+checks, and collection/research review.
+
+The instructions retain immutable data, the permanent random holdout, explicit
+label confirmation, prompt protections, deliberate print choices, and the Git
+freeze. They reconcile the old 3% battery target with the owner's full-wear-day
+amendment and distinguish the approved allocator from gated learned inference.
+Claude hooks remain Claude-specific; no global harness settings were changed.
+
+**Verified:** all three skills pass the Skill Creator validator. Local Markdown
+links and new-file LF endings pass; the existing whole-tree secrets guard and a
+separate scan of handoff docs/skills for private configuration values pass.
+Git whitespace checks pass. SHA-256 comparison confirms the ten pre-existing
+non-documentation edits/untracked code/config files were not changed. Changes to
+the already-dirty CLAUDE and living spec are documentation insertions only.
+
+Skill placement and the root instruction entry point follow the official
+[skill discovery](https://learn.chatgpt.com/docs/build-skills) and
+[AGENTS.md guidance](https://learn.chatgpt.com/docs/agent-configuration/agents-md),
+checked 2026-09-06. File installation and format were verified; fresh-session
+automatic discovery was not independently exercised. No extra agent was launched.
+
+**Limits:** this was local source review and documentation/skill setup. No APK
+build/install, live network/device check, scheduler change, notification publish,
+print action, model fitting, raw-data analysis, staging, commit, or push was done.
+The August operational receipts below are historical; they do not establish health
+today. In particular, the recorded September 4 consent expiry needs a current
+check rather than being treated as either still pending or already fixed.
+
+**Recommended next:** make collection-health checks truthful, then record and
+test prompt delivery end to end. Source-review findings about scheduler/token
+checks, deferral, spacing, READY validation, and truncated bus reads are in the
+roadmap. They are documented concerns, not fixes or observed live failures.
+
 ## Status, 2026-08-31
 
 **What was asked.** Check the watch is working and the emotion face is really recording; fix the
