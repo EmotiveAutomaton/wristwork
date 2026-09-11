@@ -16,6 +16,10 @@ until the exporter is updated, so printer controls, agent status, machine teleme
 private infrastructure, local configuration, data, and the original history remain
 outside this project.
 
+The exporter includes dot directories on Linux and stops if the generated `.github`,
+`.agents`, `.gitignore`, or backend `.env.example` files are missing. This prevents a
+cross-platform sync from silently removing the workflow or its privacy guardrails.
+
 The scheduled workflow is guarded to run only when `github.repository` is
 `EmotiveAutomaton/wristwork-emotion`. A wearer can fork this clean repository and
 keep private configuration outside Git. Updates then arrive through GitHub's normal
