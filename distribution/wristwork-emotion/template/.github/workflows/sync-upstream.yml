@@ -36,7 +36,10 @@ jobs:
         run: ./upstream/tools/export-wristwork-emotion.ps1 -Destination ./export
       - name: Replace generated tree
         shell: bash
-        run: rsync -a --delete --exclude='.git/' "$GITHUB_WORKSPACE/export/" "$GITHUB_WORKSPACE/target/"
+        # GitHub's repository token may update generated content, but it cannot update
+        # workflow files. Keep .github target-managed so ordinary app syncs cannot fail
+        # or rewrite the job that grants them access.
+        run: rsync -a --delete --exclude='.git/' --exclude='.github/' "$GITHUB_WORKSPACE/export/" "$GITHUB_WORKSPACE/target/"
       - name: Detect a change
         id: change
         working-directory: target

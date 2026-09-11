@@ -11,6 +11,12 @@ write only to `wristwork-emotion`; no cross-repository personal token is require
 The workflow also supports a manual run. It runs the secrets guard, unit tests, and
 APK build before committing, so a failed export leaves the target branch unchanged.
 
+`.github/` is target-managed and excluded from automated replacement. GitHub's
+repository token cannot modify workflow files without a broader workflow-management
+credential. Workflow updates are therefore reviewed and pushed manually by the
+repository owner; ordinary app, backend, docs, skills, and ignore-rule changes remain
+automatic.
+
 The allowlist is deliberate. New files in `wristwork` do not enter this repository
 until the exporter is updated, so printer controls, agent status, machine telemetry,
 private infrastructure, local configuration, data, and the original history remain
@@ -29,4 +35,5 @@ fork by removing that guard unless replacing the fork's files is actually intend
 
 Shared app fixes should be made in `wristwork` and included by
 `tools/export-wristwork-emotion.ps1`. Distribution-only docs, backend files, and
-skills are maintained in `distribution/wristwork-emotion/template` there.
+skills are maintained in `distribution/wristwork-emotion/template` there. Workflow
+changes start there too, then require the manual target update described above.
