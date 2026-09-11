@@ -79,12 +79,26 @@ $templateRoot = Join-Path $sourceRoot 'distribution/wristwork-emotion/template'
 if (-not (Test-Path -LiteralPath $templateRoot -PathType Container)) {
     throw "Export template is missing: $templateRoot"
 }
-Get-ChildItem -LiteralPath $templateRoot -Recurse -File | ForEach-Object {
+# -Force matters on Linux runners: dot directories such as .github and .agents are
+# hidden there. Omitting it made a successful sync delete the workflow that ran it.
+Get-ChildItem -LiteralPath $templateRoot -Recurse -File -Force | ForEach-Object {
     $relative = $_.FullName.Substring($templateRoot.Length).TrimStart(
         [IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
     $target = Join-Path $destinationRoot $relative
     New-Item -ItemType Directory -Path (Split-Path $target -Parent) -Force | Out-Null
     Copy-Item -LiteralPath $_.FullName -Destination $target -Force
+}
+
+$requiredHiddenOutputs = @(
+    '.agents/skills/wristwork-emotion-setup/SKILL.md',
+    '.github/workflows/sync-upstream.yml',
+    '.gitignore',
+    'backend/.env.example'
+)
+foreach ($relative in $requiredHiddenOutputs) {
+    if (-not (Test-Path -LiteralPath (Join-Path $destinationRoot $relative) -PathType Leaf)) {
+        throw "Export is incomplete; required hidden output is missing: $relative"
+    }
 }
 
 Write-Output "Exported wristwork-emotion to $destinationRoot"
